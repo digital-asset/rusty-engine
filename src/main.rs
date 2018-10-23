@@ -346,10 +346,29 @@ impl<'a> State<'a> {
             _ => panic!("Applying value"),
           },
           Kont::Fun(prim2, mut args2, missing2) => {
-            // TODO(MH): Short circuit if the next `kont` frame is an `Arg`
-            // and we're still missing arguments.
+            // NOTE(MH): We're short circuitig if the next `kont` frame is an `Arg`
+            // and we're still missing arguments. The unoptimized version would be:
+            // args2.push(Rc::clone(&v));
+            // Ctrl::Value(Rc::new(Value::PAP(prim2, args2, missing2 - 1)))
             args2.push(Rc::clone(&v));
-            Ctrl::Value(Rc::new(Value::PAP(prim2, args2, missing2 - 1)))
+            if missing2 > 1 {
+              let kont_opt = self.kont.pop();
+              match kont_opt {
+                Some(Kont::Arg(arg)) => {
+                  self.kont.push(Kont::Fun(prim2, args2, missing2 - 1));
+                  Ctrl::Expr(&arg)
+                }
+                Some(kont) => {
+                  self.kont.push(kont);
+                  Ctrl::Value(Rc::new(Value::PAP(prim2, args2, missing2 - 1)))
+                }
+                None =>
+                  Ctrl::Value(Rc::new(Value::PAP(prim2, args2, missing2 - 1)))
+              }
+            }
+            else {
+              Ctrl::Value(Rc::new(Value::PAP(prim2, args2, missing2 - 1)))
+            }
           }
           Kont::Match(alts) => match v.borrow() {
             Value::PrimCon(con1) => {
