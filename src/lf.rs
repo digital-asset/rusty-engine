@@ -51,11 +51,11 @@ pub mod debruijn {
 
 use self::debruijn::Env;
 
-type Var = String;
+pub type Var = String;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct DottedName {
-  segments: Vec<String>,
+pub struct DottedName {
+  pub segments: Vec<String>,
 }
 
 impl DottedName {
@@ -67,8 +67,8 @@ impl DottedName {
 }
 
 #[derive (Debug)]
-struct ModuleRef {
-  module_name: DottedName,
+pub struct ModuleRef {
+  pub module_name: DottedName,
 }
 
 impl ModuleRef {
@@ -79,7 +79,7 @@ impl ModuleRef {
 }
 
 #[derive (Debug)]
-struct TypeCon {
+pub struct TypeCon {
   module_ref: ModuleRef,
   name: DottedName,
 }
@@ -93,10 +93,10 @@ impl TypeCon {
   }
 }
 
-type Builtin = daml_lf_1::BuiltinFunction;
+pub type Builtin = daml_lf_1::BuiltinFunction;
 
-#[derive (Debug)]
-enum PrimCon {
+#[derive (Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PrimCon {
   Unit,
   False,
   True,
@@ -114,11 +114,10 @@ impl PrimCon {
   }
 }
 
-#[derive (Debug)]
-enum PrimLit {
+#[derive (Clone, Debug)]
+pub enum PrimLit {
   Int64(i64),
   Text(String),
-  Party(String),
   Unsupported(&'static str),
 }
 
@@ -130,14 +129,14 @@ impl PrimLit {
       decimal(_) => PrimLit::Unsupported("PrimLit::Decimal"),
       text(x) => PrimLit::Text(x),
       timestamp(_) => PrimLit::Unsupported("PrimLit::Timestamp"),
-      party(x) => PrimLit::Party(x),
+      party(_) => PrimLit::Unsupported("PrimLit::Party"),
       date(_) => PrimLit::Unsupported("PrimLit::Date"),
     }
   }
 }
 
 #[derive (Debug)]
-enum Pat {
+pub enum Pat {
   Default,
   Variant(String, Var),
   PrimCon(PrimCon),
@@ -169,9 +168,9 @@ impl Pat {
 }
 
 #[derive (Debug)]
-struct Alt {
-  pattern: Pat,
-  body: Box<Expr>,
+pub struct Alt {
+  pub pattern: Pat,
+  pub body: Expr,
 }
 
 impl Alt {
@@ -180,7 +179,7 @@ impl Alt {
     let body = {
       let binders = pattern.binders();
       env.push_many(&binders);
-      let body = Expr::from_proto_ptr(env, proto.body);
+      let body = Expr::from_proto(env, proto.body.unwrap());
       env.pop_many(&binders);
       body
     };
@@ -189,7 +188,7 @@ impl Alt {
 }
 
 #[derive (Debug)]
-enum Expr {
+pub enum Expr {
   Var {
     name: Var,
     index: usize,
@@ -203,7 +202,8 @@ enum Expr {
   PrimLit(PrimLit),
   RecCon {
     tycon: TypeCon,
-    fields: Vec<(String, Expr)>,
+    fields: Vec<String>,
+    exprs: Vec<Expr>,
   },
   RecProj {
     tycon: TypeCon,
@@ -260,12 +260,15 @@ impl Expr {
       prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(x)),
       rec_con(x) => {
         let tycon = TypeCon::from_proto(x.tycon.unwrap());
-        let fields = x
-          .fields
-          .into_iter()
-          .map(|fx| (fx.field, Self::from_proto(env, fx.expr.unwrap())))
-          .collect();
-        Expr::RecCon { tycon, fields }
+        let mut fields = Vec::new();
+        fields.reserve(x.fields.len());
+        let mut exprs = Vec::new();
+        exprs.reserve(x.fields.len());
+        for fx in x.fields.into_vec() {
+          fields.push(fx.field);
+          exprs.push(Self::from_proto(env, fx.expr.unwrap()));
+        }
+        Expr::RecCon { tycon, fields, exprs }
       }
       rec_proj(x) => {
         let tycon = TypeCon::from_proto(x.tycon.unwrap());
@@ -354,9 +357,9 @@ impl Expr {
 }
 
 #[derive (Debug)]
-struct DefValue {
-  name: String,
-  expr: Expr,
+pub struct DefValue {
+  pub name: String,
+  pub expr: Expr,
 }
 
 impl DefValue {
@@ -369,7 +372,7 @@ impl DefValue {
 }
 
 #[derive (Debug)]
-struct Module {
+pub struct Module {
   name: DottedName,
   values: HashMap<String, DefValue>,
 }
@@ -419,5 +422,9 @@ impl Package {
     let proto = protobuf::parse_from_reader(&mut file)?;
     let package = Package::from_proto(proto);
     Ok(package)
+  }
+
+  pub fn get_value(&self, module_ref: &ModuleRef, name: &String) -> &DefValue {
+    self.modules.get(&module_ref.module_name).unwrap().values.get(name).unwrap()
   }
 }

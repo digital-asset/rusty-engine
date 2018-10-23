@@ -107,7 +107,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ruceki"
+name = "rusty-engine"
 version = "0.1.0"
 dependencies = [
  "protobuf 2.1.1 (registry+https://github.com/rust-lang/crates.io-index)",

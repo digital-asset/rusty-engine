@@ -1,4 +1,43 @@
-daml 1.0
+daml 1.2
 module Main where
 
-def f (x : Integer) : Integer = x+x
+insert : Int -> [Int] -> [Int]
+insert y = \case
+  [] -> [y]
+  x :: xs
+    | y <= x -> y :: x :: xs
+    | otherwise -> x :: insert y xs
+
+isort : [Int] -> [Int]
+isort = \case
+  [] -> []
+  x :: xs -> insert x (isort xs)
+
+sorted : [Int] -> Bool
+sorted = \case
+  [] -> True
+  [_] -> True
+  x1 :: x2 :: xs -> x1 <= x2 && sorted (x2 :: xs)
+
+iterate : Int -> (a -> a) -> a -> [a]
+iterate n f x
+  | n <= 0 = []
+  | otherwise = x :: iterate (n-1) f (f x)
+
+alt_aux : Int -> [Int] -> Int
+alt_aux acc = \case
+  [] -> acc
+  [x] -> acc+x
+  x1 :: x2 :: xs -> alt_aux (acc+x1-x2) xs
+
+alt : [Int] -> Int
+alt = alt_aux 0
+
+main : Int
+main =
+  let xs = iterate 2000 (\x -> (91*x) % 1000000007) 1
+      ys = isort xs
+  in  if sorted ys then alt ys else 0
+
+test : Scenario Int
+test = pure main
