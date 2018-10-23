@@ -408,7 +408,7 @@ fn externals() -> Externals {
     .collect()
 }
 
-fn main() -> std::io::Result<()> {
+fn _main() -> std::io::Result<()> {
   let debug = false;
   let args: Vec<String> = env::args().collect();
   let filename = &args[1];
@@ -437,5 +437,13 @@ fn main() -> std::io::Result<()> {
     eprintln!("==========\nResult: {:?}", state.ctrl);
   }
 
+  Ok(())
+}
+
+fn main() -> std::io::Result<()> {
+  let args: Vec<String> = env::args().collect();
+  let filename = &args[1];
+  let package = lf::Package::load(filename)?;
+  println!("{:?}", package);
   Ok(())
 }

@@ -235,7 +235,7 @@ impl ::protobuf::reflect::ProtobufValue for ArchivePayload {
 pub struct Archive {
     // message fields
     pub hash_function: HashFunction,
-    pub payload: ::std::vec::Vec<u8>,
+    pub payload: ::protobuf::SingularPtrField<ArchivePayload>,
     pub hash: ::std::string::String,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
@@ -262,30 +262,37 @@ impl Archive {
         self.hash_function
     }
 
-    // bytes payload = 3;
+    // .daml_lf.ArchivePayload payload = 3;
 
     pub fn clear_payload(&mut self) {
         self.payload.clear();
     }
 
+    pub fn has_payload(&self) -> bool {
+        self.payload.is_some()
+    }
+
     // Param is passed by value, moved
-    pub fn set_payload(&mut self, v: ::std::vec::Vec<u8>) {
-        self.payload = v;
+    pub fn set_payload(&mut self, v: ArchivePayload) {
+        self.payload = ::protobuf::SingularPtrField::some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
-    pub fn mut_payload(&mut self) -> &mut ::std::vec::Vec<u8> {
-        &mut self.payload
+    pub fn mut_payload(&mut self) -> &mut ArchivePayload {
+        if self.payload.is_none() {
+            self.payload.set_default();
+        }
+        self.payload.as_mut().unwrap()
     }
 
     // Take field
-    pub fn take_payload(&mut self) -> ::std::vec::Vec<u8> {
-        ::std::mem::replace(&mut self.payload, ::std::vec::Vec::new())
+    pub fn take_payload(&mut self) -> ArchivePayload {
+        self.payload.take().unwrap_or_else(|| ArchivePayload::new())
     }
 
-    pub fn get_payload(&self) -> &[u8] {
-        &self.payload
+    pub fn get_payload(&self) -> &ArchivePayload {
+        self.payload.as_ref().unwrap_or_else(|| ArchivePayload::default_instance())
     }
 
     // string hash = 4;
@@ -317,6 +324,11 @@ impl Archive {
 
 impl ::protobuf::Message for Archive {
     fn is_initialized(&self) -> bool {
+        for v in &self.payload {
+            if !v.is_initialized() {
+                return false;
+            }
+        };
         true
     }
 
@@ -328,7 +340,7 @@ impl ::protobuf::Message for Archive {
                     ::protobuf::rt::read_proto3_enum_with_unknown_fields_into(wire_type, is, &mut self.hash_function, 1, &mut self.unknown_fields)?
                 },
                 3 => {
-                    ::protobuf::rt::read_singular_proto3_bytes_into(wire_type, is, &mut self.payload)?;
+                    ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.payload)?;
                 },
                 4 => {
                     ::protobuf::rt::read_singular_proto3_string_into(wire_type, is, &mut self.hash)?;
@@ -348,8 +360,9 @@ impl ::protobuf::Message for Archive {
         if self.hash_function != HashFunction::SHA256 {
             my_size += ::protobuf::rt::enum_size(1, self.hash_function);
         }
-        if !self.payload.is_empty() {
-            my_size += ::protobuf::rt::bytes_size(3, &self.payload);
+        if let Some(ref v) = self.payload.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         }
         if !self.hash.is_empty() {
             my_size += ::protobuf::rt::string_size(4, &self.hash);
@@ -363,8 +376,10 @@ impl ::protobuf::Message for Archive {
         if self.hash_function != HashFunction::SHA256 {
             os.write_enum(1, self.hash_function.value())?;
         }
-        if !self.payload.is_empty() {
-            os.write_bytes(3, &self.payload)?;
+        if let Some(ref v) = self.payload.as_ref() {
+            os.write_tag(3, ::protobuf::wire_format::WireTypeLengthDelimited)?;
+            os.write_raw_varint32(v.get_cached_size())?;
+            v.write_to_with_cached_sizes(os)?;
         }
         if !self.hash.is_empty() {
             os.write_string(4, &self.hash)?;
@@ -416,7 +431,7 @@ impl ::protobuf::Message for Archive {
                     |m: &Archive| { &m.hash_function },
                     |m: &mut Archive| { &mut m.hash_function },
                 ));
-                fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
+                fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<ArchivePayload>>(
                     "payload",
                     |m: &Archive| { &m.payload },
                     |m: &mut Archive| { &mut m.payload },
@@ -522,11 +537,11 @@ impl ::protobuf::reflect::ProtobufValue for HashFunction {
 static file_descriptor_proto_data: &'static [u8] = b"\
     \n\rdaml_lf.proto\x12\x07daml_lf\x1a\x0fdaml_lf_1.proto\"I\n\x0eArchiveP\
     ayload\x120\n\tdaml_lf_1\x18\x02\x20\x01(\x0b2\x12.daml_lf_1.PackageH\0R\
-    \x07damlLf1B\x05\n\x03Sum\"s\n\x07Archive\x12:\n\rhash_function\x18\x01\
-    \x20\x01(\x0e2\x15.daml_lf.HashFunctionR\x0chashFunction\x12\x18\n\x07pa\
-    yload\x18\x03\x20\x01(\x0cR\x07payload\x12\x12\n\x04hash\x18\x04\x20\x01\
-    (\tR\x04hash*\x1a\n\x0cHashFunction\x12\n\n\x06SHA256\x10\0B\x1a\n\x18co\
-    m.digitalasset.daml_lfb\x06proto3\
+    \x07damlLf1B\x05\n\x03Sum\"\x8c\x01\n\x07Archive\x12:\n\rhash_function\
+    \x18\x01\x20\x01(\x0e2\x15.daml_lf.HashFunctionR\x0chashFunction\x121\n\
+    \x07payload\x18\x03\x20\x01(\x0b2\x17.daml_lf.ArchivePayloadR\x07payload\
+    \x12\x12\n\x04hash\x18\x04\x20\x01(\tR\x04hash*\x1a\n\x0cHashFunction\
+    \x12\n\n\x06SHA256\x10\0B\x1a\n\x18com.digitalasset.daml_lfb\x06proto3\
 ";
 
 static mut file_descriptor_proto_lazy: ::protobuf::lazy::Lazy<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::lazy::Lazy {

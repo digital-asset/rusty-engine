@@ -1,0 +1,4 @@
+daml 1.0
+module Main where
+
+def f (x : Integer) : Integer = x+x
