@@ -93,7 +93,39 @@ impl TypeCon {
   }
 }
 
-pub type Builtin = daml_lf_1::BuiltinFunction;
+#[derive (Debug, Clone, Copy)]
+pub enum Builtin {
+  AddInt64,
+  SubInt64,
+  MulInt64,
+  ModInt64,
+  EqualInt64,
+  LeqInt64,
+  GeqInt64,
+  LessInt64,
+  GreaterInt64,
+
+  Unsupported(daml_lf_1::BuiltinFunction),
+}
+
+impl Builtin {
+  fn from_proto(proto: daml_lf_1::BuiltinFunction) -> Builtin {
+    use daml_lf_1::BuiltinFunction::*;
+    use lf::Builtin::*;
+    match proto {
+      ADD_INT64 => AddInt64,
+      SUB_INT64 => SubInt64,
+      MUL_INT64 => MulInt64,
+      MOD_INT64 => ModInt64,
+      EQUAL_INT64 => EqualInt64,
+      LEQ_INT64 => LeqInt64,
+      GEQ_INT64 => GeqInt64,
+      LESS_INT64 => LessInt64,
+      GREATER_INT64 => GreaterInt64,
+      _ => Unsupported(proto),
+    }
+  }
+}
 
 #[derive (Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PrimCon {
@@ -255,7 +287,7 @@ impl Expr {
         let name = x.name;
         Expr::Val { module_ref, name }
       }
-      builtin(x) => Expr::Builtin(x),
+      builtin(x) => Expr::Builtin(Builtin::from_proto(x)),
       prim_con(x) => Expr::PrimCon(PrimCon::from_proto(x)),
       prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(x)),
       rec_con(x) => {

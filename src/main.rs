@@ -4,6 +4,7 @@ extern crate protobuf;
 use std::borrow::Borrow;
 use std::env;
 use std::rc::Rc;
+use std::time::Instant;
 
 mod daml_lf;
 mod daml_lf_1;
@@ -32,60 +33,60 @@ enum Value<'a> {
   PAP(Prim<'a>, Vec<Rc<Value<'a>>>, usize),
 }
 
-fn arity(opcode: Builtin) -> usize {
-  use daml_lf_1::BuiltinFunction::*;
-  match opcode {
-    ADD_INT64 => 2,
-    SUB_INT64 => 2,
-    MUL_INT64 => 2,
-    MOD_INT64 => 2,
-    EQUAL_INT64 => 2,
-    LEQ_INT64 => 2,
-    GEQ_INT64 => 2,
-    LESS_INT64 => 2,
-    GREATER_INT64 => 2,
-    _ => panic!("Missing: {:?}", opcode),
+fn arity(builtin: Builtin) -> usize {
+  use Builtin::*;
+  match builtin {
+    AddInt64 => 2,
+    SubInt64 => 2,
+    MulInt64 => 2,
+    ModInt64 => 2,
+    EqualInt64 => 2,
+    LeqInt64 => 2,
+    GeqInt64 => 2,
+    LessInt64 => 2,
+    GreaterInt64 => 2,
+    Unsupported(x) => panic!("Builtin::Unsupported {:?}", x),
   }
 }
 
-fn interpret<'a>(opcode: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
-  use daml_lf_1::BuiltinFunction::*;
+fn interpret<'a>(builtin: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
+  use Builtin::*;
   use Value::*;
   use PrimLit::*;
-  match opcode {
-    ADD_INT64 =>
+  match builtin {
+    AddInt64 =>
       match args.as_slice() {
         [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_add(*x, *y).expect("ADD_INT64 failed"))),
+          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_add(*x, *y).expect("ADD Int64 failed"))),
           _ => panic!("Expected two Int64 arguments"),
         }
         _ => panic!("Expected two Int64 arguments"),
       },
-    SUB_INT64 =>
+    SubInt64 =>
       match args.as_slice() {
         [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_sub(*x, *y).expect("SUB_INT64 failed"))),
+          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_sub(*x, *y).expect("SUB Int64 failed"))),
           _ => panic!("Expected two Int64 arguments"),
         }
         _ => panic!("Expected two Int64 arguments"),
       },
-    MUL_INT64 =>
+    MulInt64 =>
       match args.as_slice() {
         [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_mul(*x, *y).expect("MUL_INT64 failed"))),
+          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_mul(*x, *y).expect("MUL Int64 failed"))),
           _ => panic!("Expected two Int64 arguments"),
         }
         _ => panic!("Expected two Int64 arguments"),
       },
-    MOD_INT64 =>
+    ModInt64 =>
       match args.as_slice() {
         [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_rem(*x, *y).expect("MOD_INT64 failed"))),
+          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_rem(*x, *y).expect("MOD Int64 failed"))),
           _ => panic!("Expected two Int64 arguments"),
         }
         _ => panic!("Expected two Int64 arguments"),
       },
-    EQUAL_INT64 =>
+    EqualInt64 =>
       match args.as_slice() {
         [x, y] => match (x.borrow(), y.borrow()) {
           (PrimLit(Int64(x)), PrimLit(Int64(y))) => Value::mk_bool(x == y),
@@ -93,7 +94,7 @@ fn interpret<'a>(opcode: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
         }
         _ => panic!("Expected two Int64 arguments"),
       },
-    LEQ_INT64 =>
+    LeqInt64 =>
       match args.as_slice() {
         [x, y] => match (x.borrow(), y.borrow()) {
           (PrimLit(Int64(x)), PrimLit(Int64(y))) => Value::mk_bool(x <= y),
@@ -101,7 +102,7 @@ fn interpret<'a>(opcode: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
         }
         _ => panic!("Expected two Int64 arguments"),
       },
-    GEQ_INT64 =>
+    GeqInt64 =>
       match args.as_slice() {
         [x, y] => match (x.borrow(), y.borrow()) {
           (PrimLit(Int64(x)), PrimLit(Int64(y))) => Value::mk_bool(x >= y),
@@ -109,7 +110,7 @@ fn interpret<'a>(opcode: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
         }
         _ => panic!("Expected two Int64 arguments"),
       },
-    LESS_INT64 =>
+    LessInt64 =>
       match args.as_slice() {
         [x, y] => match (x.borrow(), y.borrow()) {
           (PrimLit(Int64(x)), PrimLit(Int64(y))) => Value::mk_bool(x < y),
@@ -117,7 +118,7 @@ fn interpret<'a>(opcode: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
         }
         _ => panic!("Expected two Int64 arguments"),
       },
-    GREATER_INT64 =>
+    GreaterInt64 =>
       match args.as_slice() {
         [x, y] => match (x.borrow(), y.borrow()) {
           (PrimLit(Int64(x)), PrimLit(Int64(y))) => Value::mk_bool(x > y),
@@ -125,7 +126,7 @@ fn interpret<'a>(opcode: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
         }
         _ => panic!("Expected two Int64 arguments"),
       },
-    _ => panic!("Missing: {:?}", opcode),
+    Builtin::Unsupported(x) => panic!("Builtin::Unsupported {:?}", x),
   }
 }
 
@@ -475,20 +476,18 @@ fn main() -> std::io::Result<()> {
     name: String::from("main"),
   };
 
+  let start = Instant::now();
   let mut state = State::from_expr(&entry_point);
   let mut count = 0;
-  if DEBUG {
-    eprintln!("State 0: {:?}", state);
-  }
+  // eprintln!("State 0: {:?}", state);
   while !state.is_final() {
     state.step(&package);
     count += 1;
-    if DEBUG {
-      eprintln!("State {}: {:?}", count, state);
-    }
+    // eprintln!("State {}: {:?}", count, state);
   }
+  let duration = start.elapsed();
 
-  eprintln!("==========\nSteps: {}\nResult: {:?}", count, state.ctrl);
+  eprintln!("==========\nSteps: {}\nTime: {:?}\nResult: {:?}", count, duration, state.ctrl);
 
   Ok(())
 }
