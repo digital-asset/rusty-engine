@@ -24,7 +24,6 @@ enum Prim<'a> {
 
 #[derive(Debug)]
 enum Value<'a> {
-  PrimCon(PrimCon),
   PrimLit(PrimLit),
   RecCon(&'a TypeCon, &'a Vec<String>, Vec<Rc<Value<'a>>>),
   VariantCon(&'a TypeCon, &'a String, Rc<Value<'a>>),
@@ -187,11 +186,11 @@ struct State<'a> {
 
 impl<'a> Value<'a> {
   fn mk_unit() -> Self {
-    Value::PrimCon(PrimCon::Unit)
+    Value::PrimLit(PrimLit::Unit)
   }
 
   fn mk_bool(b: bool) -> Self {
-    Value::PrimCon(if b { PrimCon::True } else { PrimCon::False })
+    Value::PrimLit(PrimLit::Bool(b))
   }
 }
 
@@ -235,9 +234,6 @@ impl<'a> State<'a> {
 
         Expr::Builtin(opcode) =>
           Ctrl::from_prim(Prim::Builtin(*opcode), arity(*opcode)),
-
-        Expr::PrimCon(con) =>
-          Ctrl::from_value(Value::PrimCon(*con)),
 
         // TODO(MH): Figure out if we actually need to clone?
         Expr::PrimLit(lit) =>
@@ -372,9 +368,9 @@ impl<'a> State<'a> {
             }
           }
           Kont::Match(alts) => match v.borrow() {
-            Value::PrimCon(con1) => {
+            Value::PrimLit(PrimLit::Bool(b1)) => {
               let alt_opt = alts.iter().find(|alt| match &alt.pattern {
-                Pat::PrimCon(con2) => con1 == con2,
+                Pat::Bool(b2) => b1 == b2,
                 Pat::Default => true,
                 _ => false,
               });

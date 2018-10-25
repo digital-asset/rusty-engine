@@ -127,27 +127,10 @@ impl Builtin {
   }
 }
 
-#[derive (Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PrimCon {
-  Unit,
-  False,
-  True,
-}
-
-impl PrimCon {
-  fn from_proto(proto: daml_lf_1::PrimCon) -> PrimCon {
-    use daml_lf_1::PrimCon::*;
-    use lf::PrimCon::*;
-    match proto {
-      CON_UNIT => Unit,
-      CON_FALSE => False,
-      CON_TRUE => True,
-    }
-  }
-}
-
 #[derive (Clone, Debug)]
 pub enum PrimLit {
+  Unit,
+  Bool(bool),
   Int64(i64),
   Text(String),
   Unsupported(&'static str),
@@ -171,7 +154,8 @@ impl PrimLit {
 pub enum Pat {
   Default,
   Variant(String, Var),
-  PrimCon(PrimCon),
+  Unit,
+  Bool(bool),
   Nil,
   Cons(Var, Var),
 }
@@ -179,10 +163,15 @@ pub enum Pat {
 impl Pat {
   fn from_proto(proto: daml_lf_1::CaseAlt_oneof_Sum) -> Self {
     use daml_lf_1::CaseAlt_oneof_Sum::*;
+    use daml_lf_1::PrimCon::*;
     match proto {
       default(_) => Pat::Default,
       variant(x) => Pat::Variant(x.variant, x.binder),
-      prim_con(x) => Pat::PrimCon(PrimCon::from_proto(x)),
+      prim_con(x) => match x {
+        CON_UNIT => Pat::Unit,
+        CON_FALSE => Pat::Bool(false),
+        CON_TRUE => Pat::Bool(true),
+      }
       nil(_) => Pat::Nil,
       cons(x) => Pat::Cons(x.var_head, x.var_tail),
     }
@@ -192,7 +181,8 @@ impl Pat {
     match self {
       Pat::Default => vec![],
       Pat::Variant(_, x) => vec![x],
-      Pat::PrimCon(_) => vec![],
+      Pat::Unit => vec![],
+      Pat::Bool(_) => vec![],
       Pat::Nil => vec![],
       Pat::Cons(x, y) => vec![x, y],
     }
@@ -230,7 +220,6 @@ pub enum Expr {
     name: String,
   },
   Builtin(Builtin),
-  PrimCon(PrimCon),
   PrimLit(PrimLit),
   RecCon {
     tycon: TypeCon,
@@ -276,6 +265,7 @@ pub enum Expr {
 impl Expr {
   fn from_proto(env: &mut Env, proto: daml_lf_1::Expr) -> Expr {
     use daml_lf_1::Expr_oneof_Sum::*;
+    use daml_lf_1::PrimCon::*;
     match proto.Sum.unwrap() {
       var(x) => {
         let index = env.get(&x);
@@ -288,7 +278,11 @@ impl Expr {
         Expr::Val { module_ref, name }
       }
       builtin(x) => Expr::Builtin(Builtin::from_proto(x)),
-      prim_con(x) => Expr::PrimCon(PrimCon::from_proto(x)),
+      prim_con(x) => Expr::PrimLit(match x {
+        CON_UNIT => PrimLit::Unit,
+        CON_FALSE => PrimLit::Bool(false),
+        CON_TRUE => PrimLit::Bool(true),
+      }),
       prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(x)),
       rec_con(x) => {
         let tycon = TypeCon::from_proto(x.tycon.unwrap());
