@@ -1,0 +1,63 @@
+daml 1.2
+module Main where
+
+import Prelude hiding (map, foldr, (++), concat, concatMap, foldl, length)
+
+map : (a -> b) -> [a] -> [b]
+map f = \case
+  [] -> []
+  x::xs -> f x :: map f xs
+
+foldr : (a -> b -> b) -> b -> [a] -> b
+foldr f z = \case
+  [] -> z
+  x::xs -> f x (foldr f z xs)
+
+(++) : [a] -> [a] -> [a]
+(++) xs ys = foldr (::) ys xs
+
+concat : [[a]] -> [a]
+concat = foldr (++) []
+
+concatMap : (a -> [b]) -> [a] -> [b]
+concatMap f = concat . map f
+
+foldl : (b -> a -> b) -> b -> [a] -> b
+foldl f z = \case
+  [] -> z
+  x::xs -> foldl f (f z x) xs
+
+length : [a] -> Int
+length = foldl (\n _ -> n+1) 0
+
+diff : [Int] -> [Int] -> [Int]
+diff = curry $ \case
+  ([], ys) -> []
+  (xs, []) -> xs
+  (x::xs, y::ys)
+    | x < y -> x :: diff xs (y::ys)
+    | x == y -> diff xs ys
+    | otherwise -> diff (x::xs) ys
+
+range : Int -> Int -> [Int]
+range m n  = if m <= n then m :: range (m+1) n else []
+
+solve_aux : [Int] -> [[Int]] -> [[Int]]
+solve_aux ints = \case
+  [] -> [[]]
+  ks::kss ->
+      concatMap (\k ->
+        map (k::)
+          (solve_aux ints (zipWith (\ls i ->
+              diff ls [k-i,k,k+i])
+            kss
+            ints)))
+      ks
+
+solve : Int -> [[Int]]
+solve n =
+  let ints = range 1 n
+  in  solve_aux ints (replicate n ints)
+
+main : Int
+main = length $ solve 10
