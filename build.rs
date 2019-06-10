@@ -8,13 +8,14 @@ fn main() {
     protoc_rust::run(protoc_rust::Args {
         out_dir,
         input: &[
-          "protos/da/daml_lf.proto",
-          "protos/da/daml_lf_0.proto",
-          "protos/da/daml_lf_1.proto",
+            "protos/da/daml_lf.proto",
+            "protos/da/daml_lf_0.proto",
+            "protos/da/daml_lf_1.proto",
         ],
         includes: &["protos"],
         customize: Customize {
-          ..Default::default()
+            ..Default::default()
         },
-    }).expect("protoc");
+    })
+    .expect("protoc");
 }
