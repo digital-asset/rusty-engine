@@ -596,16 +596,35 @@ impl Package {
         Package { id, modules }
     }
 
-    pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Package> {
+    pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Self> {
         use std::fs::File;
         let mut file: File = File::open(path)?;
         let proto = protobuf::parse_from_reader(&mut file)?;
         let package = Package::from_proto(proto);
         Ok(package)
     }
+}
+
+pub struct World {
+    pub main: PackageId,
+    packages: FnvHashMap<PackageId, Package>,
+}
+
+impl World {
+    pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Self> {
+        let package = Package::load(path)?;
+        let main = package.id.clone();
+        let mut packages = FnvHashMap::default();
+        packages.insert(package.id.clone(), package);
+        let world = World { main, packages };
+        Ok(world)
+    }
 
     pub fn get_value(&self, module_ref: &ModuleRef, name: &String) -> &DefValue {
-        self.modules
+        self.packages
+            .get(&module_ref.package_id)
+            .unwrap()
+            .modules
             .get(&module_ref.module_name)
             .unwrap()
             .values

@@ -299,7 +299,7 @@ impl<'a> State<'a> {
         }
     }
 
-    fn step(&mut self, package: &'a Package) {
+    fn step(&mut self, world: &'a World) {
         let old_ctrl = std::mem::replace(&mut self.ctrl, Ctrl::Evaluating);
 
         let new_ctrl = match old_ctrl {
@@ -315,7 +315,7 @@ impl<'a> State<'a> {
                     let new_env = Env::new();
                     let old_env = std::mem::replace(&mut self.env, new_env);
                     self.kont.push(Kont::Dump(old_env));
-                    let def = package.get_value(module_ref, name);
+                    let def = world.get_value(module_ref, name);
                     Ctrl::Expr(&def.expr)
                 }
 
@@ -601,10 +601,10 @@ struct RunResult<'a> {
     value: Rc<Value<'a>>,
 }
 
-fn make_entry_point(package: &Package) -> Expr {
+fn make_entry_point(world: &World) -> Expr {
     Expr::Val {
         module_ref: ModuleRef {
-            package_id: package.id.clone(),
+            package_id: world.main.clone(),
             module_name: DottedName {
                 segments: vec![String::from("Main")],
             },
@@ -613,13 +613,13 @@ fn make_entry_point(package: &Package) -> Expr {
     }
 }
 
-fn run<'a>(package: &'a lf::Package, entry_point: &'a Expr) -> RunResult<'a> {
+fn run<'a>(world: &'a lf::World, entry_point: &'a Expr) -> RunResult<'a> {
     let start = Instant::now();
     let mut state = State::from_expr(&entry_point);
     let mut count = 0;
     // eprintln!("State 0: {:?}", state);
     while !state.is_final() {
-        state.step(&package);
+        state.step(&world);
         count += 1;
         // eprintln!("State {}: {:?}", count, state);
     }
@@ -639,10 +639,10 @@ fn run<'a>(package: &'a lf::Package, entry_point: &'a Expr) -> RunResult<'a> {
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
-    let package = lf::Package::load(filename)?;
+    let world = lf::World::load(filename)?;
 
-    let entry_point = make_entry_point(&package);
-    let run_result = run(&package, &entry_point);
+    let entry_point = make_entry_point(&world);
+    let run_result = run(&world, &entry_point);
 
     println!(
         "Input:  {}\nSteps:  {}\nTime:   {:?}\nResult: {:?}",
@@ -658,10 +658,10 @@ mod tests {
 
     #[test]
     fn queens() {
-        let package = lf::Package::load("test/Queens.dalf").unwrap();
+        let world = lf::World::load("test/Queens.dalf").unwrap();
 
-        let entry_point = make_entry_point(&package);
-        let run_result = run(&package, &entry_point);
+        let entry_point = make_entry_point(&world);
+        let run_result = run(&world, &entry_point);
         assert_eq!(run_result.count, 165463963);
         match *run_result.value {
             Value::Int64(n) => assert_eq!(n, 724),
@@ -671,10 +671,10 @@ mod tests {
 
     #[test]
     fn sort() {
-        let package = lf::Package::load("test/Sort.dalf").unwrap();
+        let world = lf::World::load("test/Sort.dalf").unwrap();
 
-        let entry_point = make_entry_point(&package);
-        let run_result = run(&package, &entry_point);
+        let entry_point = make_entry_point(&world);
+        let run_result = run(&world, &entry_point);
         assert_eq!(run_result.count, 253034194);
         match *run_result.value {
             Value::Int64(n) => assert_eq!(n, -476622085),
