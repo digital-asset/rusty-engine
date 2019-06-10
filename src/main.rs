@@ -2,7 +2,7 @@
 use std::borrow::Borrow;
 use std::env;
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 mod lf;
 mod protos;
@@ -587,20 +587,24 @@ impl<'a> State<'a> {
 
 const DEBUG: bool = false;
 
-fn main() -> std::io::Result<()> {
-    let args: Vec<String> = env::args().collect();
-    let filename = &args[1];
-    let package = lf::Package::load(filename)?;
+struct RunResult<'a> {
+    count: i64,
+    duration: Duration,
+    value: Rc<Value<'a>>,
+}
 
-    let entry_point = Expr::Val {
+fn make_entry_point() -> Expr {
+    Expr::Val {
         module_ref: ModuleRef {
             module_name: DottedName {
                 segments: vec![String::from("Main")],
             },
         },
         name: String::from("main"),
-    };
+    }
+}
 
+fn run<'a>(package: &'a lf::Package, entry_point: &'a Expr) -> RunResult<'a> {
     let start = Instant::now();
     let mut state = State::from_expr(&entry_point);
     let mut count = 0;
@@ -611,11 +615,61 @@ fn main() -> std::io::Result<()> {
         // eprintln!("State {}: {:?}", count, state);
     }
     let duration = start.elapsed();
+    let value = match state.ctrl {
+        Ctrl::Value(v) => v,
+        _ => panic!("IMPOSSIBLE: final control is always a value"),
+    };
+
+    RunResult {
+        count,
+        duration,
+        value,
+    }
+}
+
+fn main() -> std::io::Result<()> {
+    let args: Vec<String> = env::args().collect();
+    let filename = &args[1];
+    let package = lf::Package::load(filename)?;
+
+    let entry_point = make_entry_point();
+    let run_result = run(&package, &entry_point);
 
     println!(
         "Input:  {}\nSteps:  {}\nTime:   {:?}\nResult: {:?}",
-        filename, count, duration, state.ctrl
+        filename, run_result.count, run_result.duration, run_result.value,
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queens() {
+        let package = lf::Package::load("test/Queens.dalf").unwrap();
+
+        let entry_point = make_entry_point();
+        let run_result = run(&package, &entry_point);
+        assert_eq!(run_result.count, 165463963);
+        match *run_result.value {
+            Value::Int64(n) => assert_eq!(n, 724),
+            _ => assert!(false),
+        }
+    }
+
+    #[test]
+    fn sort() {
+        let package = lf::Package::load("test/Sort.dalf").unwrap();
+
+        let entry_point = make_entry_point();
+        let run_result = run(&package, &entry_point);
+        assert_eq!(run_result.count, 253034194);
+        match *run_result.value {
+            Value::Int64(n) => assert_eq!(n, -476622085),
+            _ => assert!(false),
+        }
+    }
 }
