@@ -3,9 +3,10 @@ extern crate protoc_rust;
 use protoc_rust::Customize;
 
 fn main() {
-  if true {
+    let out_dir = "src/protos";
+    std::fs::create_dir_all(out_dir).expect("mkdir -p");
     protoc_rust::run(protoc_rust::Args {
-        out_dir: "src",
+        out_dir,
         input: &[
           "protos/daml_lf.proto",
           "protos/daml_lf_1.proto",
@@ -15,5 +16,4 @@ fn main() {
           ..Default::default()
         },
     }).expect("protoc");
-  }
 }

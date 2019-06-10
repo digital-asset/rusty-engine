@@ -4,8 +4,7 @@ use std::env;
 use std::rc::Rc;
 use std::time::Instant;
 
-mod daml_lf;
-mod daml_lf_1;
+mod protos;
 mod lf;
 
 use crate::lf::*;

@@ -1,7 +1,7 @@
 use fnv::FnvHashMap;
 
-use crate::daml_lf;
-use crate::daml_lf_1;
+use crate::protos::daml_lf as daml_lf;
+use crate::protos::daml_lf_1 as daml_lf_1;
 
 pub mod debruijn {
   use std::collections::HashMap;
@@ -141,7 +141,7 @@ pub enum Builtin {
 
 impl Builtin {
   fn from_proto(proto: daml_lf_1::BuiltinFunction) -> Builtin {
-    use crate::daml_lf_1::BuiltinFunction::*;
+    use daml_lf_1::BuiltinFunction::*;
     use self::Builtin::*;
     match proto {
       EQUAL_BOOL => EqualBool,
@@ -195,7 +195,7 @@ pub enum PrimLit {
 
 impl PrimLit {
   fn from_proto(proto: daml_lf_1::PrimLit) -> PrimLit {
-    use crate::daml_lf_1::PrimLit_oneof_Sum::*;
+    use daml_lf_1::PrimLit_oneof_Sum::*;
     match proto.Sum.unwrap() {
       int64(x) => PrimLit::Int64(x),
       decimal(_) => PrimLit::Unsupported("PrimLit::Decimal"),
@@ -219,8 +219,8 @@ pub enum Pat {
 
 impl Pat {
   fn from_proto(proto: daml_lf_1::CaseAlt_oneof_Sum) -> Self {
-    use crate::daml_lf_1::CaseAlt_oneof_Sum::*;
-    use crate::daml_lf_1::PrimCon::*;
+    use daml_lf_1::CaseAlt_oneof_Sum::*;
+    use daml_lf_1::PrimCon::*;
     match proto {
       default(_) => Pat::Default,
       variant(x) => Pat::Variant(x.variant, x.binder),
@@ -316,8 +316,8 @@ pub enum Expr {
 
 impl Expr {
   fn from_proto(env: &mut Env, proto: daml_lf_1::Expr) -> Expr {
-    use crate::daml_lf_1::Expr_oneof_Sum::*;
-    use crate::daml_lf_1::PrimCon::*;
+    use daml_lf_1::Expr_oneof_Sum::*;
+    use daml_lf_1::PrimCon::*;
     match proto.Sum.unwrap() {
       var(x) => {
         let index = env.get(&x);
