@@ -86,6 +86,8 @@ fn arity(builtin: Builtin) -> usize {
         Int64ToText => 1,
         TextToText => 1,
 
+        Int64FromText => 1,
+
         Cons => 2,
         Foldr => 3,
         Foldl => 3,
@@ -150,7 +152,13 @@ fn interpret<'a>(builtin: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
         GreaterText => Value::Bool(args[0].as_string() > args[1].as_string()),
 
         Int64ToText => Value::Text(args[0].as_i64().to_string()),
+        // NOTE(MH): We handle `TextToText` special to avoid cloning.
         TextToText => panic!("Builtin::TextToText is handled in step"),
+
+        Int64FromText => match args[0].as_string().parse() {
+            Err(_) => Value::None,
+            Ok(n) => Value::Some(Rc::new(Value::Int64(n))),
+        },
 
         Cons => {
             let head = Rc::clone(args[0].borrow());

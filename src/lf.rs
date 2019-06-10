@@ -113,7 +113,7 @@ impl TypeCon {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Builtin {
-    // Boolean comparis
+    // Boolean comparison
     EqualBool,
 
     // Integer arithmetic
@@ -146,6 +146,9 @@ pub enum Builtin {
     // Conversion to text
     Int64ToText,
     TextToText,
+
+    // Conversion from text
+    Int64FromText,
 
     // List operations
     Cons,
@@ -193,13 +196,52 @@ impl Builtin {
             TO_TEXT_INT64 => Int64ToText,
             TO_TEXT_TEXT => TextToText,
 
+            FROM_TEXT_INT64 => Int64FromText,
+
             FOLDR => Foldr,
             FOLDL => Foldl,
             EQUAL_LIST => EqualList,
 
             ERROR => Error,
 
-            _ => Unsupported(proto),
+            // Text stuff
+            TO_TEXT_CODE_POINTS | FROM_TEXT_CODE_POINTS | SHA256_TEXT => Unsupported(proto),
+
+            // Decimal unsupported
+            ADD_DECIMAL | SUB_DECIMAL | MUL_DECIMAL | DIV_DECIMAL | ROUND_DECIMAL
+            | EQUAL_DECIMAL | LEQ_DECIMAL | LESS_DECIMAL | GEQ_DECIMAL | GREATER_DECIMAL
+            | TO_TEXT_DECIMAL | FROM_TEXT_DECIMAL | INT64_TO_DECIMAL | DECIMAL_TO_INT64 => {
+                Unsupported(proto)
+            }
+
+            // Date unsupported
+            EQUAL_DATE | LEQ_DATE | LESS_DATE | GEQ_DATE | GREATER_DATE | TO_TEXT_DATE
+            | DATE_TO_UNIX_DAYS | UNIX_DAYS_TO_DATE => Unsupported(proto),
+
+            // Timestamp unsupported
+            EQUAL_TIMESTAMP
+            | LEQ_TIMESTAMP
+            | LESS_TIMESTAMP
+            | GEQ_TIMESTAMP
+            | GREATER_TIMESTAMP
+            | TO_TEXT_TIMESTAMP
+            | TIMESTAMP_TO_UNIX_MICROSECONDS
+            | UNIX_MICROSECONDS_TO_TIMESTAMP => Unsupported(proto),
+
+            // Party unsupported
+            EQUAL_PARTY | LEQ_PARTY | LESS_PARTY | GEQ_PARTY | GREATER_PARTY
+            | TO_QUOTED_TEXT_PARTY | TO_TEXT_PARTY | FROM_TEXT_PARTY => Unsupported(proto),
+
+            // ContractId unsupported
+            EQUAL_CONTRACT_ID | COERCE_CONTRACT_ID => Unsupported(proto),
+
+            // Map unsupported
+            MAP_EMPTY | MAP_INSERT | MAP_LOOKUP | MAP_DELETE | MAP_TO_LIST | MAP_SIZE => {
+                Unsupported(proto)
+            }
+
+            // Misc
+            TRACE => Unsupported(proto),
         }
     }
 }
