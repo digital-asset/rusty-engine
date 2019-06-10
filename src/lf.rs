@@ -4,17 +4,19 @@ use crate::protos::da::daml_lf;
 use crate::protos::da::daml_lf_1;
 
 pub mod debruijn {
-    use super::Var;
+    use super::{PackageId, Var};
     use std::collections::HashMap;
 
     pub struct Env {
+        pub self_package_id: PackageId,
         rev_indices: HashMap<super::Var, Vec<usize>>,
         depth: usize,
     }
 
     impl Env {
-        pub fn new() -> Self {
+        pub fn new(self_package_id: PackageId) -> Self {
             Env {
+                self_package_id,
                 rev_indices: HashMap::new(),
                 depth: 0,
             }
@@ -57,6 +59,8 @@ use self::debruijn::Env;
 
 pub type Var = String;
 
+pub type PackageId = String;
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct DottedName {
     pub segments: Vec<String>,
@@ -72,13 +76,23 @@ impl DottedName {
 
 #[derive(Debug)]
 pub struct ModuleRef {
+    pub package_id: PackageId,
     pub module_name: DottedName,
 }
 
 impl ModuleRef {
-    fn from_proto(proto: daml_lf_1::ModuleRef) -> Self {
+    fn from_proto(proto: daml_lf_1::ModuleRef, self_package_id: PackageId) -> Self {
+        use daml_lf_1::PackageRef_oneof_Sum;
+        let package_ref: daml_lf_1::PackageRef = proto.package_ref.unwrap();
+        let package_id = match package_ref.Sum.unwrap() {
+            PackageRef_oneof_Sum::field_self(_) => self_package_id,
+            PackageRef_oneof_Sum::package_id(id) => id,
+        };
         let module_name = DottedName::from_proto(proto.module_name.unwrap());
-        ModuleRef { module_name }
+        ModuleRef {
+            package_id,
+            module_name,
+        }
     }
 }
 
@@ -89,9 +103,9 @@ pub struct TypeCon {
 }
 
 impl TypeCon {
-    fn from_proto(proto: daml_lf_1::Type_Con) -> TypeCon {
+    fn from_proto(proto: daml_lf_1::Type_Con, self_package_id: PackageId) -> TypeCon {
         let tycon = proto.tycon.unwrap();
-        let module_ref = ModuleRef::from_proto(tycon.module.unwrap());
+        let module_ref = ModuleRef::from_proto(tycon.module.unwrap(), self_package_id);
         let name = DottedName::from_proto(tycon.name.unwrap());
         TypeCon { module_ref, name }
     }
@@ -340,7 +354,8 @@ impl Expr {
                 Expr::Var { name, index }
             }
             val(x) => {
-                let module_ref = ModuleRef::from_proto(x.module.unwrap());
+                let module_ref =
+                    ModuleRef::from_proto(x.module.unwrap(), env.self_package_id.clone());
                 let name = x.name.join(".");
                 Expr::Val { module_ref, name }
             }
@@ -352,7 +367,7 @@ impl Expr {
             }),
             prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(x)),
             rec_con(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap());
+                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env.self_package_id.clone());
                 let mut fields = Vec::new();
                 fields.reserve(x.fields.len());
                 let mut exprs = Vec::new();
@@ -368,7 +383,7 @@ impl Expr {
                 }
             }
             rec_proj(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap());
+                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env.self_package_id.clone());
                 let field = x.field;
                 let record = Self::from_proto_ptr(env, x.record);
                 Expr::RecProj {
@@ -378,7 +393,7 @@ impl Expr {
                 }
             }
             variant_con(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap());
+                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env.self_package_id.clone());
                 let con = x.variant_con;
                 let arg = Self::from_proto_ptr(env, x.variant_arg);
                 Expr::VariantCon { tycon, con, arg }
@@ -528,8 +543,8 @@ pub struct DefValue {
 }
 
 impl DefValue {
-    fn from_proto(proto: daml_lf_1::DefValue) -> Self {
-        let mut env = Env::new();
+    fn from_proto(proto: daml_lf_1::DefValue, self_package_id: PackageId) -> Self {
+        let mut env = Env::new(self_package_id);
         let name = proto.name_with_type.unwrap().name.join(".");
         let expr = Expr::from_proto(&mut env, proto.expr.unwrap());
         DefValue { name, expr }
@@ -543,13 +558,13 @@ pub struct Module {
 }
 
 impl Module {
-    fn from_proto(proto: daml_lf_1::Module) -> Self {
+    fn from_proto(proto: daml_lf_1::Module, self_package_id: PackageId) -> Self {
         let name = DottedName::from_proto(proto.name.unwrap());
         let values = proto
             .values
             .into_iter()
             .map(|x| {
-                let y = DefValue::from_proto(x);
+                let y = DefValue::from_proto(x, self_package_id.clone());
                 (y.name.clone(), y)
             })
             .collect();
@@ -559,24 +574,26 @@ impl Module {
 
 #[derive(Debug)]
 pub struct Package {
+    pub id: PackageId,
     modules: FnvHashMap<DottedName, Module>,
 }
 
 impl Package {
     fn from_proto(proto: daml_lf::Archive) -> Self {
         let payload: daml_lf::ArchivePayload = protobuf::parse_from_bytes(&proto.payload).unwrap();
+        let id = proto.hash;
         let modules = match payload.Sum.unwrap() {
             daml_lf::ArchivePayload_oneof_Sum::daml_lf_0(_) => panic!("DAML-LF 0.x not supported"),
             daml_lf::ArchivePayload_oneof_Sum::daml_lf_1(proto) => proto
                 .modules
                 .into_iter()
                 .map(|x| {
-                    let y = Module::from_proto(x);
+                    let y = Module::from_proto(x, id.clone());
                     (y.name.clone(), y)
                 })
                 .collect(),
         };
-        Package { modules }
+        Package { id, modules }
     }
 
     pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Package> {

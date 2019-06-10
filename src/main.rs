@@ -601,9 +601,10 @@ struct RunResult<'a> {
     value: Rc<Value<'a>>,
 }
 
-fn make_entry_point() -> Expr {
+fn make_entry_point(package: &Package) -> Expr {
     Expr::Val {
         module_ref: ModuleRef {
+            package_id: package.id.clone(),
             module_name: DottedName {
                 segments: vec![String::from("Main")],
             },
@@ -640,7 +641,7 @@ fn main() -> std::io::Result<()> {
     let filename = &args[1];
     let package = lf::Package::load(filename)?;
 
-    let entry_point = make_entry_point();
+    let entry_point = make_entry_point(&package);
     let run_result = run(&package, &entry_point);
 
     println!(
@@ -659,7 +660,7 @@ mod tests {
     fn queens() {
         let package = lf::Package::load("test/Queens.dalf").unwrap();
 
-        let entry_point = make_entry_point();
+        let entry_point = make_entry_point(&package);
         let run_result = run(&package, &entry_point);
         assert_eq!(run_result.count, 165463963);
         match *run_result.value {
@@ -672,7 +673,7 @@ mod tests {
     fn sort() {
         let package = lf::Package::load("test/Sort.dalf").unwrap();
 
-        let entry_point = make_entry_point();
+        let entry_point = make_entry_point(&package);
         let run_result = run(&package, &entry_point);
         assert_eq!(run_result.count, 253034194);
         match *run_result.value {
