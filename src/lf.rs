@@ -520,6 +520,8 @@ impl Package {
       .Sum
       .unwrap();
     let modules = match payload {
+      daml_lf::ArchivePayload_oneof_Sum::daml_lf_0(_) =>
+        panic!("DAML-LF 0.x not supported"),
       daml_lf::ArchivePayload_oneof_Sum::daml_lf_1(proto) =>
         proto
           .modules

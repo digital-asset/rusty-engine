@@ -9,6 +9,7 @@ fn main() {
         out_dir,
         input: &[
           "protos/da/daml_lf.proto",
+          "protos/da/daml_lf_0.proto",
           "protos/da/daml_lf_1.proto",
         ],
         includes: &["protos"],
