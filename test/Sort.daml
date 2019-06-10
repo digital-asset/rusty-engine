@@ -35,7 +35,7 @@ alt = alt_aux 0
 
 main : Int
 main =
-  let xs = iterate 2000 (\x -> (91*x) % 1000000007) 1
+  let xs = iterate 100 (\x -> (91*x) % 1000000007) 1
       ys = isort xs
   in  if sorted ys then alt ys else 0
 

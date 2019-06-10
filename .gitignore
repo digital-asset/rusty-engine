@@ -1,4 +1,3 @@
 .envrc
 src/protos/da/
 target
-test/*.dalf

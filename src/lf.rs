@@ -596,10 +596,8 @@ impl Package {
         Package { id, modules }
     }
 
-    pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Self> {
-        use std::fs::File;
-        let mut file: File = File::open(path)?;
-        let proto = protobuf::parse_from_reader(&mut file)?;
+    pub fn load<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        let proto = protobuf::parse_from_reader(reader)?;
         let package = Package::from_proto(proto);
         Ok(package)
     }
@@ -612,10 +610,39 @@ pub struct World {
 
 impl World {
     pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Self> {
-        let package = Package::load(path)?;
-        let main = package.id.clone();
-        let mut packages = FnvHashMap::default();
-        packages.insert(package.id.clone(), package);
+        use std::fs::File;
+        use std::io::*;
+        let zip_file: File = File::open(path)?;
+        let mut zip = zip::ZipArchive::new(zip_file)?;
+        let manifest = zip.by_name("META-INF/MANIFEST.MF")?;
+        let manifest_buffered = BufReader::new(manifest);
+        let mut main_name: String = String::new();
+        let mut package_names: Vec<String> = Vec::new();
+        for line in manifest_buffered.lines() {
+            let line = line?;
+            if line.starts_with("Main-Dalf:") {
+                main_name = String::from(line[10..].trim());
+            } else if line.starts_with("Dalfs:") {
+                package_names = line[6..]
+                    .split(',')
+                    .map(|x| String::from(x.trim()))
+                    .collect();
+            }
+        }
+        let main_index = package_names.iter().position(|x| x == &main_name).unwrap();
+        package_names.swap(0, main_index);
+        let mut packages = Vec::new();
+        for name in package_names {
+            let mut file = zip.by_name(&name)?;
+            let package = Package::load(&mut file)?;
+            packages.push(package);
+        }
+
+        let main = packages[0].id.clone();
+        let packages = packages
+            .into_iter()
+            .map(|package| (package.id.clone(), package))
+            .collect();
         let world = World { main, packages };
         Ok(world)
     }

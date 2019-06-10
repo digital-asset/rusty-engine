@@ -658,26 +658,26 @@ mod tests {
 
     #[test]
     fn queens() {
-        let world = lf::World::load("test/Queens.dalf").unwrap();
+        let world = lf::World::load("test/Queens.dar").unwrap();
 
         let entry_point = make_entry_point(&world);
         let run_result = run(&world, &entry_point);
-        assert_eq!(run_result.count, 165463963);
+        assert_eq!(run_result.count, 5116403);
         match *run_result.value {
-            Value::Int64(n) => assert_eq!(n, 724),
+            Value::Int64(n) => assert_eq!(n, 92),
             _ => assert!(false),
         }
     }
 
     #[test]
     fn sort() {
-        let world = lf::World::load("test/Sort.dalf").unwrap();
+        let world = lf::World::load("test/Sort.dar").unwrap();
 
         let entry_point = make_entry_point(&world);
         let run_result = run(&world, &entry_point);
-        assert_eq!(run_result.count, 253034194);
+        assert_eq!(run_result.count, 255086);
         match *run_result.value {
-            Value::Int64(n) => assert_eq!(n, -476622085),
+            Value::Int64(n) => assert_eq!(n, -487896960),
             _ => assert!(false),
         }
     }

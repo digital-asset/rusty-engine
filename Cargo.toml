@@ -9,6 +9,7 @@ exclude = ["test/**"]
 [dependencies]
 protobuf = "2.6.2"
 fnv = "1.0.6"
+zip = "0.5.2"
 
 [build-dependencies]
 protoc-rust = "2.6.2"

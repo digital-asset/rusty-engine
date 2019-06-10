@@ -31,4 +31,4 @@ solve n =
   in  solve_aux ints (replicate n ints)
 
 main : Int
-main = length $ solve 10
+main = length $ solve 8
