@@ -1,9 +1,10 @@
 use fnv::FnvHashMap;
+use std::io::*;
 
 use crate::protos::da::daml_lf;
 use crate::protos::da::daml_lf_1;
 
-pub mod debruijn {
+mod debruijn {
     use super::{PackageId, Var};
     use std::collections::HashMap;
 
@@ -638,7 +639,7 @@ impl Package {
         Package { id, modules }
     }
 
-    pub fn load<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+    fn load<R: Read>(reader: &mut R) -> Result<Self> {
         let proto = protobuf::parse_from_reader(reader)?;
         let package = Package::from_proto(proto);
         Ok(package)
@@ -651,9 +652,8 @@ pub struct World {
 }
 
 impl World {
-    pub fn load<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Self> {
+    pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
         use std::fs::File;
-        use std::io::*;
         let zip_file: File = File::open(path)?;
         let mut zip = zip::ZipArchive::new(zip_file)?;
         let manifest = zip.by_name("META-INF/MANIFEST.MF")?;
