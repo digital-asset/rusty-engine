@@ -50,6 +50,8 @@ enum Value<'a> {
     VariantCon(&'a TypeCon, &'a String, Rc<Value<'a>>),
     Nil,
     Cons(Rc<Value<'a>>, Rc<Value<'a>>),
+    None,
+    Some(Rc<Value<'a>>),
     PAP(Prim<'a>, Vec<Rc<Value<'a>>>, usize),
 }
 
@@ -89,6 +91,7 @@ fn arity(builtin: Builtin) -> usize {
         Foldl => 3,
         EqualList => 3,
 
+        Some => 1,
         Error => 1,
 
         Unsupported(x) => panic!("Builtin::Unsupported {:?}", x),
@@ -158,6 +161,10 @@ fn interpret<'a>(builtin: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
         Foldl => panic!("Builtin::Foldl is handled in step"),
         EqualList => panic!("Builtin::EqualLit is handled in step"),
 
+        Some => {
+            let body = Rc::clone(args[0].borrow());
+            Value::Some(body)
+        }
         Error => {
             let msg = args[0].as_string();
             panic!("User error: {}", msg)
@@ -319,6 +326,7 @@ impl<'a> State<'a> {
                         PrimLit::Unit => Value::Unit,
                         PrimLit::Bool(b) => Value::Bool(*b),
                         PrimLit::Nil => Value::Nil,
+                        PrimLit::None => Value::None,
                         PrimLit::Int64(i) => Value::Int64(*i),
                         PrimLit::Text(s) => Value::Text(s.clone()),
                         PrimLit::Unsupported(msg) => panic!("PrimLit::Unsupported({})", msg),

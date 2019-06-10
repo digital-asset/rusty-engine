@@ -140,6 +140,7 @@ pub enum Builtin {
     EqualList,
 
     // Misc
+    Some,
     Error,
 
     Unsupported(daml_lf_1::BuiltinFunction),
@@ -194,6 +195,7 @@ pub enum PrimLit {
     Unit,
     Bool(bool),
     Nil,
+    None,
     Int64(i64),
     Text(String),
     Unsupported(&'static str),
@@ -221,6 +223,8 @@ pub enum Pat {
     Bool(bool),
     Nil,
     Cons(Var, Var),
+    None,
+    Some(Var),
 }
 
 impl Pat {
@@ -237,6 +241,9 @@ impl Pat {
             },
             nil(_) => Pat::Nil,
             cons(x) => Pat::Cons(x.var_head, x.var_tail),
+            none(_) => Pat::None,
+            some(x) => Pat::Some(x.var_body),
+            field_enum(_) => panic!("UNSUPPORTED: enum types"),
         }
     }
 
@@ -248,6 +255,8 @@ impl Pat {
             Pat::Bool(_) => vec![],
             Pat::Nil => vec![],
             Pat::Cons(x, y) => vec![x, y],
+            Pat::None => vec![],
+            Pat::Some(x) => vec![x],
         }
     }
 }
@@ -332,7 +341,7 @@ impl Expr {
             }
             val(x) => {
                 let module_ref = ModuleRef::from_proto(x.module.unwrap());
-                let name = x.name;
+                let name = x.name.join(".");
                 Expr::Val { module_ref, name }
             }
             builtin(x) => Expr::Builtin(Builtin::from_proto(x)),
@@ -441,6 +450,15 @@ impl Expr {
                     }
                 })
             }
+            none(_) => Expr::PrimLit(PrimLit::None),
+            some(x) => {
+                let body = Self::from_proto(env, x.body.unwrap());
+                Expr::App {
+                    fun: Box::new(Expr::Builtin(Builtin::Some)),
+                    args: vec![body],
+                }
+            }
+            enum_con(_) => Expr::Unsupported("Expr::EnumCon"),
             update(_) => Expr::Unsupported("Expr::Update"),
             scenario(_) => Expr::Unsupported("Expr::Scenario"),
             rec_upd(_) => Expr::Unsupported("Expr::RecUpd"),
@@ -512,7 +530,7 @@ pub struct DefValue {
 impl DefValue {
     fn from_proto(proto: daml_lf_1::DefValue) -> Self {
         let mut env = Env::new();
-        let name = proto.var.unwrap().var;
+        let name = proto.name_with_type.unwrap().name.join(".");
         let expr = Expr::from_proto(&mut env, proto.expr.unwrap());
         DefValue { name, expr }
     }
