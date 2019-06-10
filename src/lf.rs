@@ -546,8 +546,8 @@ pub struct Package {
 
 impl Package {
     fn from_proto(proto: daml_lf::Archive) -> Self {
-        let payload = proto.payload.unwrap().Sum.unwrap();
-        let modules = match payload {
+        let payload: daml_lf::ArchivePayload = protobuf::parse_from_bytes(&proto.payload).unwrap();
+        let modules = match payload.Sum.unwrap() {
             daml_lf::ArchivePayload_oneof_Sum::daml_lf_0(_) => panic!("DAML-LF 0.x not supported"),
             daml_lf::ArchivePayload_oneof_Sum::daml_lf_1(proto) => proto
                 .modules

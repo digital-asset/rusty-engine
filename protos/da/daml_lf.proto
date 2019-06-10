@@ -35,7 +35,7 @@ message Archive {
 
   // Must be an encoded ArchivePayload. We store it as `bytes` to
   // simplify hashing and in future signing.
-  ArchivePayload payload = 3;
+  bytes payload = 3;
   // The hash is simply the ascii7 lowercase hex-encoded hash of the bytes
   // according to the hash_function. We store it here for convenience, code
   // reading the Archive should verify that the hash is valid.
