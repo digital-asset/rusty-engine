@@ -3,7 +3,7 @@ package daml_lf;
 
 option java_package = "com.digitalasset.daml_lf";
 
-import "daml_lf_1.proto";
+import "da/daml_lf_1.proto";
 
 message ArchivePayload {
   oneof Sum {

@@ -1,7 +1,7 @@
 use fnv::FnvHashMap;
 
-use crate::protos::daml_lf as daml_lf;
-use crate::protos::daml_lf_1 as daml_lf_1;
+use crate::protos::da::daml_lf as daml_lf;
+use crate::protos::da::daml_lf_1 as daml_lf_1;
 
 pub mod debruijn {
   use std::collections::HashMap;

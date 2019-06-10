@@ -1,4 +1,4 @@
 .envrc
-src/protos/
+src/protos/da/
 target
 test/*.dalf
