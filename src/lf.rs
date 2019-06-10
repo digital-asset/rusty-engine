@@ -1,9 +1,7 @@
-use std;
-use std::collections::HashMap;
-use protobuf;
+use fnv::FnvHashMap;
 
-use daml_lf;
-use daml_lf_1;
+use crate::daml_lf;
+use crate::daml_lf_1;
 
 pub mod debruijn {
   use std::collections::HashMap;
@@ -95,33 +93,91 @@ impl TypeCon {
 
 #[derive (Debug, Clone, Copy)]
 pub enum Builtin {
+  // Boolean comparis
+  EqualBool,
+
+  // Integer arithmetic
   AddInt64,
   SubInt64,
   MulInt64,
+  DivInt64,
   ModInt64,
+  ExpInt64,
+
+  // Integer comparison
   EqualInt64,
   LeqInt64,
   GeqInt64,
   LessInt64,
   GreaterInt64,
 
+  // Text operations
+  AppendText,
+  ImplodeText,
+  ExplodeText,
+
+  // Text comparison
+  EqualText,
+  LeqText,
+  GeqText,
+  LessText,
+  GreaterText,
+
+  // Conversion to text
+  Int64ToText,
+  TextToText,
+
+  // List operations
+  Cons,
+  Foldr,
+  Foldl,
+  EqualList,
+
+  // Misc
+  Error,
+
   Unsupported(daml_lf_1::BuiltinFunction),
 }
 
 impl Builtin {
   fn from_proto(proto: daml_lf_1::BuiltinFunction) -> Builtin {
-    use daml_lf_1::BuiltinFunction::*;
-    use lf::Builtin::*;
+    use crate::daml_lf_1::BuiltinFunction::*;
+    use self::Builtin::*;
     match proto {
+      EQUAL_BOOL => EqualBool,
+
       ADD_INT64 => AddInt64,
       SUB_INT64 => SubInt64,
       MUL_INT64 => MulInt64,
+      DIV_INT64 => DivInt64,
       MOD_INT64 => ModInt64,
+      EXP_INT64 => ExpInt64,
+
       EQUAL_INT64 => EqualInt64,
       LEQ_INT64 => LeqInt64,
       GEQ_INT64 => GeqInt64,
       LESS_INT64 => LessInt64,
       GREATER_INT64 => GreaterInt64,
+
+      APPEND_TEXT => AppendText,
+      IMPLODE_TEXT => ImplodeText,
+      EXPLODE_TEXT => ExplodeText,
+
+      EQUAL_TEXT => EqualText,
+      LEQ_TEXT => LeqText,
+      GEQ_TEXT => GeqText,
+      LESS_TEXT => LessText,
+      GREATER_TEXT => GreaterText,
+
+      TO_TEXT_INT64 => Int64ToText,
+      TO_TEXT_TEXT => TextToText,
+
+      FOLDR => Foldr,
+      FOLDL => Foldl,
+      EQUAL_LIST => EqualList,
+
+      ERROR => Error,
+
       _ => Unsupported(proto),
     }
   }
@@ -131,6 +187,7 @@ impl Builtin {
 pub enum PrimLit {
   Unit,
   Bool(bool),
+  Nil,
   Int64(i64),
   Text(String),
   Unsupported(&'static str),
@@ -138,7 +195,7 @@ pub enum PrimLit {
 
 impl PrimLit {
   fn from_proto(proto: daml_lf_1::PrimLit) -> PrimLit {
-    use daml_lf_1::PrimLit_oneof_Sum::*;
+    use crate::daml_lf_1::PrimLit_oneof_Sum::*;
     match proto.Sum.unwrap() {
       int64(x) => PrimLit::Int64(x),
       decimal(_) => PrimLit::Unsupported("PrimLit::Decimal"),
@@ -162,8 +219,8 @@ pub enum Pat {
 
 impl Pat {
   fn from_proto(proto: daml_lf_1::CaseAlt_oneof_Sum) -> Self {
-    use daml_lf_1::CaseAlt_oneof_Sum::*;
-    use daml_lf_1::PrimCon::*;
+    use crate::daml_lf_1::CaseAlt_oneof_Sum::*;
+    use crate::daml_lf_1::PrimCon::*;
     match proto {
       default(_) => Pat::Default,
       variant(x) => Pat::Variant(x.variant, x.binder),
@@ -253,19 +310,14 @@ pub enum Expr {
     bound: Box<Expr>,
     body: Box<Expr>,
   },
-  Nil,
-  Cons {
-    head: Box<Expr>,
-    tail: Box<Expr>,
-  },
 
   Unsupported(&'static str),
 }
 
 impl Expr {
   fn from_proto(env: &mut Env, proto: daml_lf_1::Expr) -> Expr {
-    use daml_lf_1::Expr_oneof_Sum::*;
-    use daml_lf_1::PrimCon::*;
+    use crate::daml_lf_1::Expr_oneof_Sum::*;
+    use crate::daml_lf_1::PrimCon::*;
     match proto.Sum.unwrap() {
       var(x) => {
         let index = env.get(&x);
@@ -336,7 +388,7 @@ impl Expr {
       case(x) => {
         let scrut = Self::from_proto_ptr(env, x.scrut);
         let alts = x.alts.into_iter().map(|y| Alt::from_proto(env, y)).collect();
-        Expr::Case { scrut, alts }
+        Expr::make_case(scrut, alts)
       }
       field_let(x) => {
         let mut bindings = Vec::new();
@@ -359,14 +411,14 @@ impl Expr {
           }
         })
       }
-      nil(_) => Expr::Nil,
+      nil(_) => Expr::PrimLit(PrimLit::Nil),
       cons(x) => {
         let tail = Self::from_proto(env, x.tail.unwrap());
         x.front.into_iter().rev().fold(tail, |tail, elem| {
-          let head = Box::new(Self::from_proto(env, elem));
-          Expr::Cons {
-            head,
-            tail: Box::new(tail),
+          let head = Self::from_proto(env, elem);
+          Expr::App {
+            fun: Box::new(Expr::Builtin(Builtin::Cons)),
+            args: vec![head, tail],
           }
         })
       }
@@ -379,6 +431,44 @@ impl Expr {
 
   fn from_proto_ptr(env: &mut Env, proto: ::protobuf::SingularPtrField<daml_lf_1::Expr>) -> Box<Expr> {
     Box::new(Expr::from_proto(env, proto.unwrap()))
+  }
+
+  fn make_case(scrut: Box<Expr>, mut alts: Vec<Alt>) -> Self {
+    assert!(!alts.is_empty(), "Empty case expression");
+    match alts[0].pattern {
+      Pat::Default => panic!("Case starting with default pattern"),
+      Pat::Bool(b0) => {
+        let pos = alts.iter().position(|alt| match &alt.pattern {
+          Pat::Bool(b) => b0 != *b,
+          Pat::Default => true,
+          _ => false,
+        }).expect("Incomplete boolean pattern match");
+        alts.swap(1, pos);
+        alts.truncate(2);
+        if b0 {
+          alts.swap(0, 1);
+        }
+      }
+      Pat::Nil => {
+        let pos = alts.iter().position(|alt| match &alt.pattern {
+          Pat::Cons(..) | Pat::Default => true,
+          _ => false,
+        }).expect("Incomplete list pattern match");
+        alts.swap(1, pos);
+        alts.truncate(2);
+      }
+      Pat::Cons(..) => {
+        let pos = alts.iter().position(|alt| match &alt.pattern {
+          Pat::Nil | Pat::Default => true,
+          _ => false,
+        }).expect("Incomplete list pattern match");
+        alts.swap(1, pos);
+        alts.truncate(2);
+        alts.swap(0, 1);
+      }
+      _ => (),
+    };
+    Expr::Case { scrut, alts }
   }
 }
 
@@ -400,7 +490,7 @@ impl DefValue {
 #[derive (Debug)]
 pub struct Module {
   name: DottedName,
-  values: HashMap<String, DefValue>,
+  values: FnvHashMap<String, DefValue>,
 }
 
 impl Module {
@@ -419,7 +509,7 @@ impl Module {
 
 #[derive (Debug)]
 pub struct Package {
-  modules: HashMap<DottedName, Module>,
+  modules: FnvHashMap<DottedName, Module>,
 }
 
 impl Package {

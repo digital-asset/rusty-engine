@@ -2,12 +2,13 @@
 name = "rusty-engine"
 version = "0.1.0"
 authors = ["Martin Huschenbett <martin.huschenbett@digitalasset.com>"]
+edition = "2018"
+
+exclude = ["test/**"]
 
 [dependencies]
-serde = "1.0"
-serde_derive = "1.0"
-serde_json = "1.0"
-protobuf = "2.1.1"
+protobuf = "2.6.2"
+fnv = "1.0.6"
 
 [build-dependencies]
-protoc-rust = "2.1.1"
+protoc-rust = "2.6.2"

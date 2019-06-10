@@ -1,6 +1,4 @@
 #![allow(dead_code)]
-extern crate protobuf;
-
 use std::borrow::Borrow;
 use std::env;
 use std::rc::Rc;
@@ -9,7 +7,30 @@ use std::time::Instant;
 mod daml_lf;
 mod daml_lf_1;
 mod lf;
-use lf::*;
+
+use crate::lf::*;
+
+mod i64_aux {
+  pub fn checked_exp(base: i64, exponent: i64) -> i64 {
+      let mut exponent = exponent;
+      if exponent < 0 {
+        panic!("checked_exp: negavtive exponent");
+      }
+      else {
+        let mut base_opt = Some(base);
+        let mut res = 1;
+        while exponent > 0 {
+          let base = base_opt.expect("checked_exp: overflow");
+          if exponent & 1 == 1 {
+            res = i64::checked_mul(res, base).expect("checked_exp: overflow");
+          }
+          base_opt = i64::checked_mul(base, base);
+          exponent >>= 1;
+        }
+        res
+      }
+  }
+}
 
 // NOTE(MH): Cloning this must remain cheap.
 #[derive(Debug, Clone)]
@@ -18,13 +39,15 @@ enum Prim<'a> {
   RecCon(&'a TypeCon, &'a Vec<String>),
   RecProj(&'a TypeCon, &'a String),
   VariantCon(&'a TypeCon, &'a String),
-  Lam(&'a Expr, Rc<Env<'a>>),
-  Cons,
+  Lam(&'a Expr, Env<'a>),
 }
 
 #[derive(Debug)]
 enum Value<'a> {
-  PrimLit(PrimLit),
+  Unit,
+  Bool(bool),
+  Int64(i64),
+  Text(String),
   RecCon(&'a TypeCon, &'a Vec<String>, Vec<Rc<Value<'a>>>),
   VariantCon(&'a TypeCon, &'a String, Rc<Value<'a>>),
   Nil,
@@ -33,99 +56,129 @@ enum Value<'a> {
 }
 
 fn arity(builtin: Builtin) -> usize {
-  use Builtin::*;
+  use self::Builtin::*;
   match builtin {
+    EqualBool => 2,
+
     AddInt64 => 2,
     SubInt64 => 2,
     MulInt64 => 2,
+    DivInt64 => 2,
     ModInt64 => 2,
+    ExpInt64 => 2,
+
     EqualInt64 => 2,
     LeqInt64 => 2,
     GeqInt64 => 2,
     LessInt64 => 2,
     GreaterInt64 => 2,
+
+    AppendText => 2,
+    ImplodeText => 1,
+    ExplodeText => 1,
+
+    EqualText => 2,
+    LeqText => 2,
+    GeqText => 2,
+    LessText => 2,
+    GreaterText => 2,
+
+    Int64ToText => 1,
+    TextToText => 1,
+
+    Cons => 2,
+    Foldr => 3,
+    Foldl => 3,
+    EqualList => 3,
+
+    Error => 1,
+
     Unsupported(x) => panic!("Builtin::Unsupported {:?}", x),
   }
 }
 
 fn interpret<'a>(builtin: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
-  use Builtin::*;
-  use Value::*;
-  use PrimLit::*;
+  use self::Builtin::*;
+  assert!(args.len() == arity(builtin),
+    "Bad arity for builtin {:?}: {}", builtin, args.len());
   match builtin {
+    EqualBool =>
+      Value::Bool(args[0].as_bool() == args[1].as_bool()),
+
     AddInt64 =>
-      match args.as_slice() {
-        [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_add(*x, *y).expect("ADD Int64 failed"))),
-          _ => panic!("Expected two Int64 arguments"),
-        }
-        _ => panic!("Expected two Int64 arguments"),
-      },
+      Value::Int64(i64::checked_add(args[0].as_i64(), args[1].as_i64()).unwrap()),
     SubInt64 =>
-      match args.as_slice() {
-        [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_sub(*x, *y).expect("SUB Int64 failed"))),
-          _ => panic!("Expected two Int64 arguments"),
-        }
-        _ => panic!("Expected two Int64 arguments"),
-      },
+      Value::Int64(i64::checked_sub(args[0].as_i64(), args[1].as_i64()).unwrap()),
     MulInt64 =>
-      match args.as_slice() {
-        [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_mul(*x, *y).expect("MUL Int64 failed"))),
-          _ => panic!("Expected two Int64 arguments"),
-        }
-        _ => panic!("Expected two Int64 arguments"),
-      },
+      Value::Int64(i64::checked_mul(args[0].as_i64(), args[1].as_i64()).unwrap()),
+    DivInt64 =>
+      Value::Int64(i64::checked_div(args[0].as_i64(), args[1].as_i64()).unwrap()),
     ModInt64 =>
-      match args.as_slice() {
-        [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => PrimLit(Int64(i64::checked_rem(*x, *y).expect("MOD Int64 failed"))),
-          _ => panic!("Expected two Int64 arguments"),
-        }
-        _ => panic!("Expected two Int64 arguments"),
-      },
+      Value::Int64(i64::checked_rem(args[0].as_i64(), args[1].as_i64()).unwrap()),
+    ExpInt64 =>
+      Value::Int64(i64_aux::checked_exp(args[0].as_i64(), args[1].as_i64())),
+
     EqualInt64 =>
-      match args.as_slice() {
-        [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => Value::mk_bool(x == y),
-          _ => panic!("Expected two Int64 arguments"),
-        }
-        _ => panic!("Expected two Int64 arguments"),
-      },
+      Value::Bool(args[0].as_i64() == args[1].as_i64()),
     LeqInt64 =>
-      match args.as_slice() {
-        [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => Value::mk_bool(x <= y),
-          _ => panic!("Expected two Int64 arguments"),
-        }
-        _ => panic!("Expected two Int64 arguments"),
-      },
+      Value::Bool(args[0].as_i64() <= args[1].as_i64()),
     GeqInt64 =>
-      match args.as_slice() {
-        [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => Value::mk_bool(x >= y),
-          _ => panic!("Expected two Int64 arguments"),
-        }
-        _ => panic!("Expected two Int64 arguments"),
-      },
+      Value::Bool(args[0].as_i64() >= args[1].as_i64()),
     LessInt64 =>
-      match args.as_slice() {
-        [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => Value::mk_bool(x < y),
-          _ => panic!("Expected two Int64 arguments"),
-        }
-        _ => panic!("Expected two Int64 arguments"),
-      },
+      Value::Bool(args[0].as_i64() < args[1].as_i64()),
     GreaterInt64 =>
-      match args.as_slice() {
-        [x, y] => match (x.borrow(), y.borrow()) {
-          (PrimLit(Int64(x)), PrimLit(Int64(y))) => Value::mk_bool(x > y),
-          _ => panic!("Expected two Int64 arguments"),
-        }
-        _ => panic!("Expected two Int64 arguments"),
-      },
-    Builtin::Unsupported(x) => panic!("Builtin::Unsupported {:?}", x),
+      Value::Bool(args[0].as_i64() > args[1].as_i64()),
+
+    AppendText => {
+      let mut res = args[0].as_string().clone();
+      res.push_str(args[1].as_string());
+      Value::Text(res)
+    }
+    ImplodeText => {
+      let mut res = String::new();
+      for val in Value::as_list_iter(&args[0]) {
+        res.push_str(val.as_string());
+      };
+      Value::Text(res)
+    }
+    ExplodeText => {
+      let arg: &Value = args[0].borrow();
+      let mut res = Value::Nil;
+      for c in arg.as_string().chars().rev() {
+        res = Value::Cons(Rc::new(Value::Text(c.to_string())), Rc::new(res));
+      }
+      res
+    }
+
+    EqualText =>
+      Value::Bool(args[0].as_string() == args[1].as_string()),
+    LeqText =>
+      Value::Bool(args[0].as_string() <= args[1].as_string()),
+    GeqText =>
+      Value::Bool(args[0].as_string() >= args[1].as_string()),
+    LessText =>
+      Value::Bool(args[0].as_string() < args[1].as_string()),
+    GreaterText =>
+      Value::Bool(args[0].as_string() > args[1].as_string()),
+
+    Int64ToText => Value::Text(args[0].as_i64().to_string()),
+    TextToText => panic!("Builtin::TextToText is handled in step"),
+
+    Cons => {
+      let head = Rc::clone(args[0].borrow());
+      let tail = Rc::clone(args[1].borrow());
+      Value::Cons(head, tail)
+    }
+    Foldr => panic!("Builtin::Foldr is handled in step"),
+    Foldl => panic!("Builtin::Foldl is handled in step"),
+    EqualList => panic!("Builtin::EqualLit is handled in step"),
+
+    Error => {
+      let msg = args[0].as_string();
+      panic!("User error: {}", msg)
+    }
+
+    Unsupported(x) => panic!("Builtin::Unsupported {:?}", x),
   }
 }
 
@@ -172,9 +225,11 @@ enum Kont<'a> {
   Dump(Env<'a>),
   Pop(usize),
   Arg(&'a Expr),
+  ArgVal(Rc<Value<'a>>),
   Fun(Prim<'a>, Vec<Rc<Value<'a>>>, usize),
   Match(&'a Vec<Alt>),
   Let(&'a Var, &'a Expr),
+  EqualList(Rc<Value<'a>>, ValueListIter<'a>, ValueListIter<'a>),
 }
 
 #[derive(Debug)]
@@ -184,13 +239,52 @@ struct State<'a> {
   kont: Vec<Kont<'a>>,
 }
 
+#[derive(Debug)]
+struct ValueListIter<'a> {
+  value: Rc<Value<'a>>,
+}
+
+impl<'a> Iterator for ValueListIter<'a> {
+  type Item = Rc<Value<'a>>;
+
+  fn next(&mut self) -> Option<Rc<Value<'a>>> {
+    match self.value.borrow() {
+      Value::Nil => None,
+      Value::Cons(head, tail) => {
+        let head = Rc::clone(&head);
+        let tail = Rc::clone(&tail);
+        self.value = tail;
+        Some(head)
+      }
+      v => panic!("Expexted list, found {:?}", v),
+    }
+  }
+}
+
 impl<'a> Value<'a> {
-  fn mk_unit() -> Self {
-    Value::PrimLit(PrimLit::Unit)
+  fn as_bool(&self) -> bool {
+    match self {
+      Value::Bool(b) => *b,
+      _ => panic!("Expected Bool, found {:?}", self),
+    }
   }
 
-  fn mk_bool(b: bool) -> Self {
-    Value::PrimLit(PrimLit::Bool(b))
+  fn as_i64(&self) -> i64 {
+    match self {
+      Value::Int64(i) => *i,
+      _ => panic!("Expected Int64, found {:?}", self),
+    }
+  }
+
+  fn as_string(&self) -> &String {
+    match self {
+      Value::Text(s) => &s,
+      _ => panic!("Expected Text, found {:?}", self),
+    }
+  }
+
+  fn as_list_iter(this: &Rc<Self>) -> ValueListIter<'a> {
+    ValueListIter { value: Rc::clone(this) }
   }
 }
 
@@ -225,7 +319,7 @@ impl<'a> State<'a> {
         }
 
         Expr::Val { module_ref, name } => {
-          let mut new_env = Env::new();
+          let new_env = Env::new();
           let old_env = std::mem::replace(&mut self.env, new_env);
           self.kont.push(Kont::Dump(old_env));
           let def = package.get_value(module_ref, name);
@@ -235,9 +329,17 @@ impl<'a> State<'a> {
         Expr::Builtin(opcode) =>
           Ctrl::from_prim(Prim::Builtin(*opcode), arity(*opcode)),
 
-        // TODO(MH): Figure out if we actually need to clone?
-        Expr::PrimLit(lit) =>
-          Ctrl::from_value(Value::PrimLit(lit.clone())),
+        Expr::PrimLit(lit) => {
+          let val = match lit {
+            PrimLit::Unit => Value::Unit,
+            PrimLit::Bool(b) => Value::Bool(*b),
+            PrimLit::Nil => Value::Nil,
+            PrimLit::Int64(i) => Value::Int64(*i),
+            PrimLit::Text(s) => Value::Text(s.clone()),
+            PrimLit::Unsupported(msg) => panic!("PrimLit::Unsupported({})", msg),
+          };
+          Ctrl::from_value(val)
+        }
 
         Expr::RecCon { tycon, fields, exprs } => {
           // TODO(MH): Find a less imperative way to do this.
@@ -268,7 +370,7 @@ impl<'a> State<'a> {
         }
 
         Expr::Lam { params, body } => {
-          Ctrl::from_prim(Prim::Lam(body, Rc::new(self.env.clone())), params.len())
+          Ctrl::from_prim(Prim::Lam(body, self.env.clone()), params.len())
         }
 
         Expr::Case { scrut, alts } => {
@@ -281,21 +383,56 @@ impl<'a> State<'a> {
           Ctrl::Expr(bound)
         }
 
-        Expr::Nil =>
-          Ctrl::from_value(Value::Nil),
-
-        Expr::Cons { head, tail } => {
-          self.kont.push(Kont::Arg(tail));
-          self.kont.push(Kont::Arg(head));
-          Ctrl::from_prim(Prim::Cons, 2)
-        }
-
         Expr::Unsupported(msg) =>
           panic!("Unsupported: {}", msg)
       }
 
       Ctrl::Value(v) => match v.borrow() {
         Value::PAP(prim, args, 0) => match prim {
+          Prim::Builtin(Builtin::TextToText) => Ctrl::Value(Rc::clone(&args[0])),
+          // TODO(MH): There's plenty of room for optimizations in foldr
+          // and foldl, but let's get something simple and correct first.
+          Prim::Builtin(Builtin::Foldr) => {
+            let f = args[0].borrow();
+            let z = args[1].borrow();
+            match args[2].borrow() {
+              // foldr f z [] = z
+              Value::Nil => Ctrl::Value(Rc::clone(z)),
+              // foldr f z (x::xs) = f x (foldr f z xs)
+              Value::Cons(x, xs) => {
+                let args2 = vec![Rc::clone(f), Rc::clone(z), Rc::clone(xs)];
+                self.kont.push(Kont::ArgVal(Rc::new(Value::PAP(Prim::Builtin(Builtin::Foldr), args2, 0))));
+                self.kont.push(Kont::ArgVal(Rc::clone(x)));
+                Ctrl::Value(Rc::clone(f))
+              }
+              v => panic!("Foldr not on list: {:?}", v),
+            }
+          }
+          Prim::Builtin(Builtin::Foldl) => {
+            let f = args[0].borrow();
+            let z = args[1].borrow();
+            match args[2].borrow() {
+              // foldl f z [] = z
+              Value::Nil => Ctrl::Value(Rc::clone(z)),
+              // foldl f z (x::xs) = foldl f (f z x) xs
+              Value::Cons(x, xs) => {
+                self.kont.push(Kont::ArgVal(Rc::clone(xs)));
+                let args2 = vec![Rc::clone(f)];
+                self.kont.push(Kont::Fun(Prim::Builtin(Builtin::Foldl), args2, 2));
+                self.kont.push(Kont::ArgVal(Rc::clone(x)));
+                self.kont.push(Kont::ArgVal(Rc::clone(z)));
+                Ctrl::Value(Rc::clone(f))
+              }
+              v => panic!("Foldl not on list: {:?}", v),
+            }
+          }
+          Prim::Builtin(Builtin::EqualList) => {
+            self.kont.push(Kont::EqualList(
+              Rc::clone(args[0].borrow()),
+              Value::as_list_iter(args[1].borrow()),
+              Value::as_list_iter(args[2].borrow())));
+            Ctrl::from_value(Value::Bool(true))
+          }
           Prim::Builtin(opcode) =>
             Ctrl::from_value(interpret(*opcode, args)),
           Prim::RecCon(tycon, fields) =>
@@ -312,17 +449,11 @@ impl<'a> State<'a> {
           Prim::VariantCon(tycon, con) =>
             Ctrl::from_value(Value::VariantCon(tycon, con, Rc::clone(args[0].borrow()))),
           Prim::Lam(body, env) => {
-            let env: &Env = env.borrow();
             let mut new_env = env.clone();
             new_env.push_many(args);
             let old_env = std::mem::replace(&mut self.env, new_env);
             self.kont.push(Kont::Dump(old_env));
             Ctrl::Expr(body)
-          }
-          Prim::Cons => {
-            let head = Rc::clone(args[0].borrow());
-            let tail = Rc::clone(args[1].borrow());
-            Ctrl::from_value(Value::Cons(head, tail))
           }
         },
 
@@ -337,8 +468,18 @@ impl<'a> State<'a> {
           }
           Kont::Arg(arg) => match v.borrow() {
             Value::PAP(prim, args, missing) => {
-              self.kont.push(Kont::Fun(prim.clone(), args.clone(), *missing));
+              let mut args = args.clone();
+              args.reserve(*missing);
+              self.kont.push(Kont::Fun(prim.clone(), args, *missing));
               Ctrl::Expr(arg)
+            }
+            _ => panic!("Applying value"),
+          },
+          // TODO(MH): Avoid duplication with above.
+          Kont::ArgVal(arg) => match v.borrow() {
+            Value::PAP(prim, args, missing) => {
+              self.kont.push(Kont::Fun(prim.clone(), args.clone(), *missing));
+              Ctrl::Value(arg)
             }
             _ => panic!("Applying value"),
           },
@@ -368,19 +509,7 @@ impl<'a> State<'a> {
             }
           }
           Kont::Match(alts) => match v.borrow() {
-            Value::PrimLit(PrimLit::Bool(b1)) => {
-              let alt_opt = alts.iter().find(|alt| match &alt.pattern {
-                Pat::Bool(b2) => b1 == b2,
-                Pat::Default => true,
-                _ => false,
-              });
-              if let Some(alt) = alt_opt {
-                Ctrl::Expr(&alt.body)
-              }
-              else {
-                panic!("No match for {:?} in {:?}", v, alts)
-              }
-            }
+            Value::Bool(b) => Ctrl::Expr(&alts[if *b { 1 } else { 0 }].body),
             Value::VariantCon(_tycon, con1, arg) => {
               let alt_opt = alts.iter().find(|alt| match &alt.pattern {
                 Pat::Variant(con2, _var) if *con1 == con2 => {
@@ -400,37 +529,15 @@ impl<'a> State<'a> {
                 panic!("No match for {:?} in {:?}", v, alts)
               }
             }
-            Value::Nil => {
-              let alt_opt = alts.iter().find(|alt| match &alt.pattern {
-                Pat::Nil | Pat::Default => true,
-                _ => false,
-              });
-              if let Some(alt) = alt_opt {
-                Ctrl::Expr(&alt.body)
-              }
-              else {
-                panic!("No match for {:?} in {:?}", v, alts)
-              }
-            }
+            Value::Nil => Ctrl::Expr(&alts[0].body),
             Value::Cons(head, tail) => {
-              let alt_opt = alts.iter().find(|alt| match &alt.pattern {
-                Pat::Cons(_head_var, _tail_var) => {
-                  // TODO(MH): Doing side effecting stuff in the predicate is
-                  // pretty bad style. Improve this when `Iterable::find_map` lands.
-                  self.kont.push(Kont::Pop(2));
-                  self.env.push(Rc::clone(head.borrow()));
-                  self.env.push(Rc::clone(tail.borrow()));
-                  true
-                }
-                Pat::Default => true,
-                _ => false,
-              });
-              if let Some(alt) = alt_opt {
-                Ctrl::Expr(&alt.body)
-              }
-              else {
-                panic!("No match for {:?} in {:?}", v, alts)
-              }
+              let alt = &alts[1];
+              if let Pat::Cons(..) = alt.pattern {
+                self.kont.push(Kont::Pop(2));
+                self.env.push(Rc::clone(head.borrow()));
+                self.env.push(Rc::clone(tail.borrow()));
+              };
+              Ctrl::Expr(&alt.body)
             }
 
             _ => panic!("Pattern match on non-data value"),
@@ -439,6 +546,23 @@ impl<'a> State<'a> {
             self.kont.push(Kont::Pop(1));
             self.env.push(Rc::clone(&v));
             Ctrl::Expr(body)
+          }
+          Kont::EqualList(eq, mut lhs, mut rhs) => {
+            if v.as_bool() {
+              match (lhs.next(), rhs.next()) {
+                (None, None) => Ctrl::from_value(Value::Bool(false)),
+                (None, Some(_)) | (Some(_), None) => Ctrl::from_value(Value::Bool(true)),
+                (Some(x), Some(y)) => {
+                  self.kont.push(Kont::EqualList(Rc::clone(&eq), lhs, rhs));
+                  self.kont.push(Kont::ArgVal(y));
+                  self.kont.push(Kont::ArgVal(x));
+                  Ctrl::Value(eq)
+                }
+              }
+            }
+            else {
+              Ctrl::from_value(Value::Bool(false))
+            }
           }
         },
       },
@@ -483,7 +607,7 @@ fn main() -> std::io::Result<()> {
   }
   let duration = start.elapsed();
 
-  eprintln!("==========\nSteps: {}\nTime: {:?}\nResult: {:?}", count, duration, state.ctrl);
+  println!("Input:  {}\nSteps:  {}\nTime:   {:?}\nResult: {:?}", filename,count, duration, state.ctrl);
 
   Ok(())
 }
