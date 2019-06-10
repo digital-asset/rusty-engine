@@ -8,8 +8,8 @@ mod cek;
 mod protos;
 mod value;
 
-use crate::cek::State;
 use crate::ast::*;
+use crate::cek::State;
 use crate::value::Value;
 
 struct RunResult<'a> {
@@ -68,42 +68,37 @@ fn main() -> std::io::Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn queens() {
-        let world = World::load("test/Queens.dar").unwrap();
-
+    fn dar_test<F>(path: &str, handler: F)
+    where
+        F: FnOnce(Rc<Value>) -> (),
+    {
+        let world = World::load(path).unwrap();
         let entry_point = make_entry_point(&world);
         let run_result = run(&world, &entry_point);
-        assert_eq!(run_result.count, 5116403);
-        match *run_result.value {
+        handler(run_result.value);
+    }
+
+    #[test]
+    fn queens() {
+        dar_test("test/Queens.dar", |result| match *result {
             Value::Int64(n) => assert_eq!(n, 92),
             _ => assert!(false),
-        }
+        });
     }
 
     #[test]
     fn sort() {
-        let world = World::load("test/Sort.dar").unwrap();
-
-        let entry_point = make_entry_point(&world);
-        let run_result = run(&world, &entry_point);
-        assert_eq!(run_result.count, 255086);
-        match *run_result.value {
+        dar_test("test/Sort.dar", |result| match *result {
             Value::Int64(n) => assert_eq!(n, -487896960),
             _ => assert!(false),
-        }
+        });
     }
 
     #[test]
     fn equal_list() {
-        let world = World::load("test/EqualList.dar").unwrap();
-
-        let entry_point = make_entry_point(&world);
-        let run_result = run(&world, &entry_point);
-        assert_eq!(run_result.count, 885);
-        match *run_result.value {
+        dar_test("test/EqualList.dar", |result| match *result {
             Value::Bool(b) => assert!(b),
             _ => assert!(false),
-        }
+        });
     }
 }
