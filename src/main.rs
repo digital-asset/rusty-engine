@@ -560,9 +560,9 @@ impl<'a> State<'a> {
                     Kont::EqualList(eq, mut lhs, mut rhs) => {
                         if v.as_bool() {
                             match (lhs.next(), rhs.next()) {
-                                (None, None) => Ctrl::from_value(Value::Bool(false)),
+                                (None, None) => Ctrl::from_value(Value::Bool(true)),
                                 (None, Some(_)) | (Some(_), None) => {
-                                    Ctrl::from_value(Value::Bool(true))
+                                    Ctrl::from_value(Value::Bool(false))
                                 }
                                 (Some(x), Some(y)) => {
                                     self.kont.push(Kont::EqualList(Rc::clone(&eq), lhs, rhs));
@@ -678,6 +678,19 @@ mod tests {
         assert_eq!(run_result.count, 255086);
         match *run_result.value {
             Value::Int64(n) => assert_eq!(n, -487896960),
+            _ => assert!(false),
+        }
+    }
+
+    #[test]
+    fn equal_list() {
+        let world = lf::World::load("test/EqualList.dar").unwrap();
+
+        let entry_point = make_entry_point(&world);
+        let run_result = run(&world, &entry_point);
+        assert_eq!(run_result.count, 885);
+        match *run_result.value {
+            Value::Bool(b) => assert!(b),
             _ => assert!(false),
         }
     }
