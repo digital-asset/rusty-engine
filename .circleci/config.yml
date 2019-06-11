@@ -1,0 +1,37 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/rust:latest
+    steps:
+      - checkout
+
+      # - run:
+      #     name: Install Rust tools
+      #     command: |
+      #         rustup component add rustfmt
+      #         rustup component add clippy
+      - restore_cache:
+          name: Restore Rust cache
+          keys:
+              - rust-v0-{{ arch }}-{{ checksum "Cargo.lock" }}
+      - run:
+          name: Style check
+          command: cargo fmt --all -- --check
+      - run:
+          name: Build
+          command: cargo build --all --all-targets
+      - run:
+          name: Lint
+          command: cargo clippy --all
+      - run:
+          name: Test
+          command: cargo test --all --all-targets
+      - save_cache:
+          name: Save Rust cache
+          paths:
+              - /usr/local/cargo/registry
+              - target/debug/.fingerprint
+              - target/debug/build
+              - target/debug/deps
+          key: rust-v0-{{ arch }}-{{ checksum "Cargo.lock" }}
