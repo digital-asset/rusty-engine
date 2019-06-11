@@ -1,6 +1,6 @@
-extern crate protoc_rust;
+extern crate protobuf_codegen_pure;
 
-use protoc_rust::Customize;
+use protobuf_codegen_pure::Customize;
 use std::process::Command;
 
 fn main() {
@@ -12,7 +12,7 @@ fn main() {
     ];
 
     std::fs::create_dir_all(out_dir).expect("mkdir -p");
-    protoc_rust::run(protoc_rust::Args {
+    protobuf_codegen_pure::run(protobuf_codegen_pure::Args {
         out_dir,
         input,
         includes: &["protos"],

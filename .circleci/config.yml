@@ -6,21 +6,21 @@ jobs:
     steps:
       - checkout
 
-      # - run:
-      #     name: Install Rust tools
-      #     command: |
-      #         rustup component add rustfmt
-      #         rustup component add clippy
+      - run:
+          name: Install Rust tools
+          command: |
+              rustup component add rustfmt
+              rustup component add clippy
       - restore_cache:
           name: Restore Rust cache
           keys:
               - rust-v0-{{ arch }}-{{ checksum "Cargo.lock" }}
       - run:
-          name: Style check
-          command: cargo fmt --all -- --check
-      - run:
           name: Build
           command: cargo build --all --all-targets
+      - run:
+          name: Style check
+          command: cargo fmt --all -- --check
       - run:
           name: Lint
           command: cargo clippy --all
