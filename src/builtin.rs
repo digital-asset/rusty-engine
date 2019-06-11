@@ -70,7 +70,7 @@ pub fn arity(builtin: Builtin) -> usize {
     }
 }
 
-pub fn interpret<'a>(builtin: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
+pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Value<'a> {
     use self::Builtin::*;
     assert!(
         args.len() == arity(builtin),
@@ -101,7 +101,7 @@ pub fn interpret<'a>(builtin: Builtin, args: &Vec<Rc<Value<'a>>>) -> Value<'a> {
         }
         ImplodeText => {
             let mut res = String::new();
-            for val in Value::as_list_iter(&args[0]) {
+            for val in Value::make_list_iter(&args[0]) {
                 res.push_str(val.as_string());
             }
             Value::Text(res)

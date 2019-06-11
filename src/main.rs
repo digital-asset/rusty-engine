@@ -1,3 +1,4 @@
+#![allow(clippy::unknown_clippy_lints)]
 use std::env;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -73,8 +74,8 @@ mod tests {
         let entry_point = make_entry_point(&world);
         let run_result = run(&world, &entry_point);
         match *run_result.value {
-            Value::Unit => assert!(true),
-            _ => assert!(false),
+            Value::Unit => (),
+            _ => panic!("expected unit result"),
         }
     }
 

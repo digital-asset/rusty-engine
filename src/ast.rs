@@ -23,32 +23,32 @@ mod debruijn {
             }
         }
 
-        pub fn get(&self, var: &Var) -> usize {
+        pub fn get(&self, var: &str) -> usize {
             self.depth - self.rev_indices.get(var).and_then(|v| v.last()).unwrap()
         }
 
         // TODO(MH): Don't clone `var`.
-        pub fn push(&mut self, var: &Var) {
+        pub fn push(&mut self, var: &str) {
             self.rev_indices
-                .entry(var.clone())
-                .or_insert(Vec::new())
+                .entry(var.to_owned())
+                .or_insert_with(Vec::new)
                 .push(self.depth);
             self.depth += 1;
         }
 
         // TODO(MH): Use iterators.
-        pub fn push_many(&mut self, vars: &Vec<&Var>) {
+        pub fn push_many(&mut self, vars: &[&Var]) {
             for var in vars {
                 self.push(var);
             }
         }
 
-        pub fn pop(&mut self, var: &Var) {
+        pub fn pop(&mut self, var: &str) {
             self.rev_indices.get_mut(var).and_then(|v| v.pop()).unwrap();
             self.depth -= 1;
         }
 
-        pub fn pop_many(&mut self, vars: &Vec<&Var>) {
+        pub fn pop_many(&mut self, vars: &[&Var]) {
             for var in vars {
                 self.pop(var);
             }
@@ -457,7 +457,7 @@ impl Expr {
                 let params: Vec<Var> = x.param.into_iter().map(|x| x.var).collect();
                 let body = {
                     // TODO(MH): Remove this abomination.
-                    let binders = params.iter().collect();
+                    let binders: Vec<&Var> = params.iter().collect();
                     env.push_many(&binders);
                     let body = Self::from_proto_ptr(env, x.body);
                     env.pop_many(&binders);
@@ -749,7 +749,7 @@ impl World {
         Ok(world)
     }
 
-    pub fn get_value(&self, module_ref: &ModuleRef, name: &String) -> &DefValue {
+    pub fn get_value(&self, module_ref: &ModuleRef, name: &str) -> &DefValue {
         self.packages
             .get(&module_ref.package_id)
             .unwrap()

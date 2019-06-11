@@ -57,7 +57,7 @@ impl<'a> State<'a> {
             Ctrl::Evaluating => panic!("Control was not update after last step"),
 
             Ctrl::Expr(expr) => match expr {
-                Expr::Var { name: _, index } => {
+                Expr::Var { index, .. } => {
                     let v = self.env.get(*index);
                     Ctrl::Value(Rc::clone(&v))
                 }
@@ -189,8 +189,8 @@ impl<'a> State<'a> {
                     Prim::Builtin(Builtin::EqualList) => {
                         self.kont.push(Kont::EqualList(
                             Rc::clone(args[0].borrow()),
-                            Value::as_list_iter(args[1].borrow()),
-                            Value::as_list_iter(args[2].borrow()),
+                            Value::make_list_iter(args[1].borrow()),
+                            Value::make_list_iter(args[2].borrow()),
                         ));
                         Ctrl::from_value(Value::Bool(true))
                     }

@@ -54,7 +54,7 @@ impl<'a> Env<'a> {
         self.stack.push(value);
     }
 
-    pub fn push_many(&mut self, args: &Vec<Rc<Value<'a>>>) {
+    pub fn push_many(&mut self, args: &[Rc<Value<'a>>]) {
         self.stack.extend_from_slice(args);
     }
 
@@ -86,7 +86,7 @@ impl<'a> Value<'a> {
         }
     }
 
-    pub fn as_list_iter(this: &Rc<Self>) -> ValueListIter<'a> {
+    pub fn make_list_iter(this: &Rc<Self>) -> ValueListIter<'a> {
         ValueListIter {
             value: Rc::clone(this),
         }
