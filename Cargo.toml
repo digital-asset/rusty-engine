@@ -1,10 +1,17 @@
+# Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 [package]
 name = "rusty-engine"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Martin Huschenbett <martin.huschenbett@digitalasset.com>"]
 edition = "2018"
-
-exclude = ["test/**"]
+build = "build.rs"
+publish = false
+description = "Prototype of a DAML Engine written in Rust"
+homepage = "https://github.com/hurryabit/rusty-engine#readme"
+repository = "https://github.com/hurryabit/rusty-engine"
+readme = "README.md"
+license = "Apache-2.0"
 
 [dependencies]
 protobuf = "2.6.2"

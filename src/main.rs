@@ -1,4 +1,5 @@
-#![allow(clippy::unknown_clippy_lints)]
+// Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
 use std::env;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
