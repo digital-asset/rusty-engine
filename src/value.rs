@@ -30,6 +30,7 @@ pub enum Value<'a> {
     Cons(Rc<Value<'a>>, Rc<Value<'a>>),
     None,
     Some(Rc<Value<'a>>),
+    Token, // The "real world" token for the `Update` monad.
     PAP(Prim<'a>, Vec<Rc<Value<'a>>>, usize),
 }
 

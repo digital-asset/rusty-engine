@@ -68,37 +68,28 @@ fn main() -> std::io::Result<()> {
 mod tests {
     use super::*;
 
-    fn dar_test<F>(path: &str, handler: F)
-    where
-        F: FnOnce(Rc<Value>) -> (),
-    {
+    fn dar_test(path: &str) {
         let world = World::load(path).unwrap();
         let entry_point = make_entry_point(&world);
         let run_result = run(&world, &entry_point);
-        handler(run_result.value);
+        match *run_result.value {
+            Value::Unit => assert!(true),
+            _ => assert!(false),
+        }
     }
 
     #[test]
     fn queens() {
-        dar_test("test/Queens.dar", |result| match *result {
-            Value::Int64(n) => assert_eq!(n, 92),
-            _ => assert!(false),
-        });
+        dar_test("test/Queens.dar");
     }
 
     #[test]
     fn sort() {
-        dar_test("test/Sort.dar", |result| match *result {
-            Value::Int64(n) => assert_eq!(n, -487896960),
-            _ => assert!(false),
-        });
+        dar_test("test/Sort.dar");
     }
 
     #[test]
     fn equal_list() {
-        dar_test("test/EqualList.dar", |result| match *result {
-            Value::Bool(b) => assert!(b),
-            _ => assert!(false),
-        });
+        dar_test("test/EqualList.dar");
     }
 }

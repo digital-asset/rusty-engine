@@ -46,7 +46,7 @@ impl<'a> State<'a> {
         State {
             ctrl: Ctrl::Expr(expr),
             env: Env::new(),
-            kont: Vec::new(),
+            kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
         }
     }
 

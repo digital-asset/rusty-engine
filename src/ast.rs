@@ -517,7 +517,7 @@ impl Expr {
                 }
             }
             enum_con(_) => Expr::Unsupported("Expr::EnumCon"),
-            update(_) => Expr::Unsupported("Expr::Update"),
+            update(x) => Self::update_from_proto(env, x),
             scenario(_) => Expr::Unsupported("Expr::Scenario"),
             rec_upd(_) => Expr::Unsupported("Expr::RecUpd"),
             tuple_upd(_) => Expr::Unsupported("Expr::TupleUpd"),
@@ -529,6 +529,66 @@ impl Expr {
         proto: ::protobuf::SingularPtrField<daml_lf_1::Expr>,
     ) -> Box<Expr> {
         Box::new(Expr::from_proto(env, proto.unwrap()))
+    }
+
+    fn update_from_proto(env: &mut Env, proto: daml_lf_1::Update) -> Expr {
+        use daml_lf_1::Update_oneof_Sum::*;
+        match proto.Sum.unwrap() {
+            field_pure(x) => {
+                let param = String::from("$token");
+                env.push(&param);
+                let body = Self::from_proto_ptr(env, x.expr);
+                env.pop(&param);
+                let params = vec![param];
+                Expr::Lam { params, body }
+            }
+            block(x) => {
+                let param = String::from("$token");
+                env.push(&param);
+                let token_index = env.get(&param);
+                let apply_token = |fun: Box<Expr>| {
+                    let args = vec![Expr::Var {
+                        name: param.clone(),
+                        index: token_index,
+                    }];
+                    Expr::App { fun, args }
+                };
+
+                let mut bindings = Vec::new();
+                bindings.reserve(x.bindings.len());
+                for binding in x.bindings.into_vec() {
+                    let binder = binding.binder.unwrap().var;
+                    let bound = apply_token(Self::from_proto_ptr(env, binding.bound));
+                    env.push(&binder);
+                    bindings.push((binder, bound));
+                }
+                let body = apply_token(Box::new(Self::from_proto(env, x.body.unwrap())));
+                for (binder, _) in bindings.iter() {
+                    env.pop(binder);
+                }
+                let lam_body = bindings
+                    .into_iter()
+                    .rev()
+                    .fold(body, |body, (binder, bound)| Expr::Let {
+                        binder,
+                        bound: Box::new(bound),
+                        body: Box::new(body),
+                    });
+
+                env.pop(&param);
+                Expr::Lam {
+                    params: vec![param],
+                    body: Box::new(lam_body),
+                }
+            }
+            embed_expr(_) => Expr::Unsupported("Expr::Embed"),
+            create(_) => Expr::Unsupported("Expr::Create"),
+            exercise(_) => Expr::Unsupported("Expr::Exercise"),
+            fetch(_) => Expr::Unsupported("Expr::Fetch"),
+            get_time(_) => Expr::Unsupported("Expr::GetTime"),
+            lookup_by_key(_) => Expr::Unsupported("Expr::LookupByKey"),
+            fetch_by_key(_) => Expr::Unsupported("Expr::FetchByKey"),
+        }
     }
 
     fn make_case(scrut: Box<Expr>, mut alts: Vec<Alt>) -> Self {

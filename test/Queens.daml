@@ -1,6 +1,8 @@
 daml 1.2
 module Main where
 
+import DA.Assert
+
 diff : [Int] -> [Int] -> [Int]
 diff = curry $ \case
   ([], ys) -> []
@@ -30,5 +32,6 @@ solve n =
   let ints = range 1 n
   in  solve_aux ints (replicate n ints)
 
-main : Int
-main = length $ solve 8
+main : Update ()
+main = do
+    length (solve 8) === 92

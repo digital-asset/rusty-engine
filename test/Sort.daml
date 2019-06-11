@@ -1,6 +1,8 @@
 daml 1.2
 module Main where
 
+import DA.Assert
+
 insert : Int -> [Int] -> [Int]
 insert y = \case
   [] -> [y]
@@ -19,25 +21,7 @@ sorted = \case
   [_] -> True
   x1 :: x2 :: xs -> x1 <= x2 && sorted (x2 :: xs)
 
-iterate : Int -> (a -> a) -> a -> [a]
-iterate n f x
-  | n <= 0 = []
-  | otherwise = x :: iterate (n-1) f (f x)
-
-alt_aux : Int -> [Int] -> Int
-alt_aux acc = \case
-  [] -> acc
-  [x] -> acc+x
-  x1 :: x2 :: xs -> alt_aux (acc+x1-x2) xs
-
-alt : [Int] -> Int
-alt = alt_aux 0
-
-main : Int
-main =
-  let xs = iterate 100 (\x -> (91*x) % 1000000007) 1
-      ys = isort xs
-  in  if sorted ys then alt ys else 0
-
-test : Scenario Int
-test = pure main
+main : Update ()
+main = do
+  let xs = [4,1,6,2,8,3,9,0,5,7]
+  isort xs === [0..9]
