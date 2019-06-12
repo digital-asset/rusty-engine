@@ -141,6 +141,10 @@ impl<'a> State<'a> {
                     Ctrl::Expr(bound)
                 }
 
+                Expr::Create { .. } => panic!("Unsupported: Expr::Create"),
+                Expr::Fetch { .. } => panic!("Unsupported: Expr::Fetch"),
+                Expr::Exercise { .. } => panic!("Unsupported: Expr::Exercise"),
+
                 Expr::Unsupported(msg) => panic!("Unsupported: {}", msg),
             },
 

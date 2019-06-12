@@ -415,6 +415,20 @@ pub enum Expr {
         bound: Box<Expr>,
         body: Box<Expr>,
     },
+    Create {
+        template_ref: TypeCon,
+        payload: Box<Expr>,
+    },
+    Fetch {
+        template_ref: TypeCon,
+        contract_id: Box<Expr>,
+    },
+    Exercise {
+        template_ref: TypeCon,
+        choice: String,
+        contract_id: Box<Expr>,
+        arg: Box<Expr>,
+    },
 
     Unsupported(&'static str),
 }
@@ -613,9 +627,34 @@ impl Expr {
                     })
             }
             embed_expr(_) => Expr::Unsupported("Expr::Embed"),
-            create(_) => Expr::Unsupported("Expr::Create"),
-            exercise(_) => Expr::Unsupported("Expr::Exercise"),
-            fetch(_) => Expr::Unsupported("Expr::Fetch"),
+            create(create_proto) => {
+                let template_ref = TypeCon::from_proto(create_proto.template.unwrap(), env);
+                let payload = Expr::from_proto_ptr(create_proto.expr, env);
+                Expr::Create {
+                    template_ref,
+                    payload,
+                }
+            }
+            fetch(fetch_proto) => {
+                let template_ref = TypeCon::from_proto(fetch_proto.template.unwrap(), env);
+                let contract_id = Expr::from_proto_ptr(fetch_proto.cid, env);
+                Expr::Fetch {
+                    template_ref,
+                    contract_id,
+                }
+            }
+            exercise(exercise_proto) => {
+                let template_ref = TypeCon::from_proto(exercise_proto.template.unwrap(), env);
+                let choice = exercise_proto.choice;
+                let contract_id = Expr::from_proto_ptr(exercise_proto.cid, env);
+                let arg = Expr::from_proto_ptr(exercise_proto.arg, env);
+                Expr::Exercise {
+                    template_ref,
+                    choice,
+                    contract_id,
+                    arg,
+                }
+            }
             get_time(_) => Expr::Unsupported("Expr::GetTime"),
             lookup_by_key(_) => Expr::Unsupported("Expr::LookupByKey"),
             fetch_by_key(_) => Expr::Unsupported("Expr::FetchByKey"),
