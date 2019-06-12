@@ -119,10 +119,9 @@ pub struct TypeCon {
 }
 
 impl TypeCon {
-    fn from_proto(proto: daml_lf_1::Type_Con, env: &Env) -> TypeCon {
-        let tycon = proto.tycon.unwrap();
-        let module_ref = ModuleRef::from_proto(tycon.module.unwrap(), env);
-        let name = DottedName::from_proto(tycon.name.unwrap());
+    fn from_proto(proto: daml_lf_1::TypeConName, env: &Env) -> TypeCon {
+        let module_ref = ModuleRef::from_proto(proto.module.unwrap(), env);
+        let name = DottedName::from_proto(proto.name.unwrap());
         TypeCon { module_ref, name }
     }
 }
@@ -443,7 +442,7 @@ impl Expr {
             }),
             prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(x)),
             rec_con(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env);
+                let tycon = TypeCon::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
                 let mut fields = Vec::new();
                 fields.reserve(x.fields.len());
                 let mut exprs = Vec::new();
@@ -459,7 +458,7 @@ impl Expr {
                 }
             }
             rec_proj(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env);
+                let tycon = TypeCon::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
                 let field = x.field;
                 let record = Self::from_proto_ptr(x.record, env);
                 Expr::RecProj {
@@ -469,7 +468,7 @@ impl Expr {
                 }
             }
             variant_con(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env);
+                let tycon = TypeCon::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
                 let con = x.variant_con;
                 let arg = Self::from_proto_ptr(x.variant_arg, env);
                 Expr::VariantCon { tycon, con, arg }
