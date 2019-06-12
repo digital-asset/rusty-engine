@@ -20,6 +20,9 @@ pub enum Prim<'a> {
     RecProj(&'a TypeCon, &'a String),
     VariantCon(&'a TypeCon, &'a String),
     Lam(&'a Expr, Env<'a>),
+    Create(&'a TypeCon),
+    Fetch(&'a TypeCon),
+    Exercise(&'a TypeCon, &'a String),
 }
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]

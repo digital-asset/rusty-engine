@@ -141,9 +141,30 @@ impl<'a> State<'a> {
                     Ctrl::Expr(bound)
                 }
 
-                Expr::Create { .. } => panic!("Unsupported: Expr::Create"),
-                Expr::Fetch { .. } => panic!("Unsupported: Expr::Fetch"),
-                Expr::Exercise { .. } => panic!("Unsupported: Expr::Exercise"),
+                Expr::Create {
+                    template_ref,
+                    payload,
+                } => {
+                    self.kont.push(Kont::Arg(payload));
+                    Ctrl::from_prim(Prim::Create(template_ref), 1)
+                }
+                Expr::Fetch {
+                    template_ref,
+                    contract_id,
+                } => {
+                    self.kont.push(Kont::Arg(contract_id));
+                    Ctrl::from_prim(Prim::Fetch(template_ref), 1)
+                }
+                Expr::Exercise {
+                    template_ref,
+                    choice,
+                    contract_id,
+                    arg,
+                } => {
+                    self.kont.push(Kont::Arg(arg));
+                    self.kont.push(Kont::Arg(contract_id));
+                    Ctrl::from_prim(Prim::Exercise(template_ref, choice), 2)
+                }
 
                 Expr::Unsupported(msg) => panic!("Unsupported: {}", msg),
             },
@@ -222,6 +243,10 @@ impl<'a> State<'a> {
                         self.kont.push(Kont::Dump(old_env));
                         Ctrl::Expr(body)
                     }
+
+                    Prim::Create(_) => panic!("Unsupported: Prim::Create"),
+                    Prim::Fetch(_) => panic!("Unsupported: Prim::Fetch"),
+                    Prim::Exercise(_, _) => panic!("Unsupported: Prim::Exercise"),
                 },
 
                 _ => match self.kont.pop().expect("Step on final state") {
