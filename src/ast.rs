@@ -97,11 +97,11 @@ impl fmt::Display for ModuleRef {
 }
 
 impl ModuleRef {
-    fn from_proto(proto: daml_lf_1::ModuleRef, self_package_id: PackageId) -> Self {
+    fn from_proto(proto: daml_lf_1::ModuleRef, env: &Env) -> Self {
         use daml_lf_1::PackageRef_oneof_Sum;
         let package_ref: daml_lf_1::PackageRef = proto.package_ref.unwrap();
         let package_id = match package_ref.Sum.unwrap() {
-            PackageRef_oneof_Sum::field_self(_) => self_package_id,
+            PackageRef_oneof_Sum::field_self(_) => env.self_package_id.clone(),
             PackageRef_oneof_Sum::package_id(id) => id,
         };
         let module_name = DottedName::from_proto(proto.module_name.unwrap());
@@ -119,9 +119,9 @@ pub struct TypeCon {
 }
 
 impl TypeCon {
-    fn from_proto(proto: daml_lf_1::Type_Con, self_package_id: PackageId) -> TypeCon {
+    fn from_proto(proto: daml_lf_1::Type_Con, env: &Env) -> TypeCon {
         let tycon = proto.tycon.unwrap();
-        let module_ref = ModuleRef::from_proto(tycon.module.unwrap(), self_package_id);
+        let module_ref = ModuleRef::from_proto(tycon.module.unwrap(), env);
         let name = DottedName::from_proto(tycon.name.unwrap());
         TypeCon { module_ref, name }
     }
@@ -361,7 +361,7 @@ impl Alt {
         let body = {
             let binders = pattern.binders();
             env.push_many(&binders);
-            let body = Expr::from_proto(env, proto.body.unwrap());
+            let body = Expr::from_proto(proto.body.unwrap(), env);
             env.pop_many(&binders);
             body
         };
@@ -418,7 +418,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    fn from_proto(env: &mut Env, proto: daml_lf_1::Expr) -> Expr {
+    fn from_proto(proto: daml_lf_1::Expr, env: &mut Env) -> Expr {
         use daml_lf_1::Expr_oneof_Sum::*;
         use daml_lf_1::PrimCon::*;
         match proto.Sum.unwrap() {
@@ -428,8 +428,7 @@ impl Expr {
                 Expr::Var { name, index }
             }
             val(x) => {
-                let module_ref =
-                    ModuleRef::from_proto(x.module.unwrap(), env.self_package_id.clone());
+                let module_ref = ModuleRef::from_proto(x.module.unwrap(), env);
                 let name = x.name.join(".");
                 Expr::Val { module_ref, name }
             }
@@ -441,14 +440,14 @@ impl Expr {
             }),
             prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(x)),
             rec_con(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env.self_package_id.clone());
+                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env);
                 let mut fields = Vec::new();
                 fields.reserve(x.fields.len());
                 let mut exprs = Vec::new();
                 exprs.reserve(x.fields.len());
                 for fx in x.fields.into_vec() {
                     fields.push(fx.field);
-                    exprs.push(Self::from_proto(env, fx.expr.unwrap()));
+                    exprs.push(Self::from_proto(fx.expr.unwrap(), env));
                 }
                 Expr::RecCon {
                     tycon,
@@ -457,7 +456,7 @@ impl Expr {
                 }
             }
             rec_proj(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env.self_package_id.clone());
+                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env);
                 let field = x.field;
                 let record = Self::from_proto_ptr(env, x.record);
                 Expr::RecProj {
@@ -467,7 +466,7 @@ impl Expr {
                 }
             }
             variant_con(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env.self_package_id.clone());
+                let tycon = TypeCon::from_proto(x.tycon.unwrap(), env);
                 let con = x.variant_con;
                 let arg = Self::from_proto_ptr(env, x.variant_arg);
                 Expr::VariantCon { tycon, con, arg }
@@ -479,11 +478,11 @@ impl Expr {
                 let args = x
                     .args
                     .into_iter()
-                    .map(|y| Self::from_proto(env, y))
+                    .map(|y| Self::from_proto(y, env))
                     .collect();
                 Expr::App { fun, args }
             }
-            ty_app(x) => Self::from_proto(env, x.expr.unwrap()),
+            ty_app(x) => Self::from_proto(x.expr.unwrap(), env),
             abs(x) => {
                 let params: Vec<Var> = x.param.into_iter().map(|x| x.var).collect();
                 let body = {
@@ -496,7 +495,7 @@ impl Expr {
                 };
                 Expr::Lam { params, body }
             }
-            ty_abs(x) => Self::from_proto(env, x.body.unwrap()),
+            ty_abs(x) => Self::from_proto(x.body.unwrap(), env),
             case(x) => {
                 let scrut = Self::from_proto_ptr(env, x.scrut);
                 let alts = x
@@ -515,7 +514,7 @@ impl Expr {
                     env.push(&binder);
                     bindings.push((binder, bound));
                 }
-                let body = Self::from_proto(env, x.body.unwrap());
+                let body = Self::from_proto(x.body.unwrap(), env);
                 for (binder, _) in bindings.iter() {
                     env.pop(binder);
                 }
@@ -530,9 +529,9 @@ impl Expr {
             }
             nil(_) => Expr::PrimLit(PrimLit::Nil),
             cons(x) => {
-                let tail = Self::from_proto(env, x.tail.unwrap());
+                let tail = Self::from_proto(x.tail.unwrap(), env);
                 x.front.into_iter().rev().fold(tail, |tail, elem| {
-                    let head = Self::from_proto(env, elem);
+                    let head = Self::from_proto(elem, env);
                     Expr::App {
                         fun: Box::new(Expr::Builtin(Builtin::Cons)),
                         args: vec![head, tail],
@@ -541,7 +540,7 @@ impl Expr {
             }
             none(_) => Expr::PrimLit(PrimLit::None),
             some(x) => {
-                let body = Self::from_proto(env, x.body.unwrap());
+                let body = Self::from_proto(x.body.unwrap(), env);
                 Expr::App {
                     fun: Box::new(Expr::Builtin(Builtin::Some)),
                     args: vec![body],
@@ -559,7 +558,7 @@ impl Expr {
         env: &mut Env,
         proto: ::protobuf::SingularPtrField<daml_lf_1::Expr>,
     ) -> Box<Expr> {
-        Box::new(Expr::from_proto(env, proto.unwrap()))
+        Box::new(Expr::from_proto(proto.unwrap(), env))
     }
 
     fn update_from_proto(env: &mut Env, proto: daml_lf_1::Update) -> Expr {
@@ -593,7 +592,7 @@ impl Expr {
                     env.push(&binder);
                     bindings.push((binder, bound));
                 }
-                let body = apply_token(Box::new(Self::from_proto(env, x.body.unwrap())));
+                let body = apply_token(Box::new(Self::from_proto(x.body.unwrap(), env)));
                 for (binder, _) in bindings.iter() {
                     env.pop(binder);
                 }
@@ -677,10 +676,9 @@ pub struct DefValue {
 }
 
 impl DefValue {
-    fn from_proto(proto: daml_lf_1::DefValue, self_package_id: PackageId) -> Self {
-        let mut env = Env::new(self_package_id);
+    fn from_proto(proto: daml_lf_1::DefValue, env: &mut Env) -> Self {
         let name = proto.name_with_type.unwrap().name.join(".");
-        let expr = Expr::from_proto(&mut env, proto.expr.unwrap());
+        let expr = Expr::from_proto(proto.expr.unwrap(), env);
         DefValue { name, expr }
     }
 }
@@ -702,10 +700,10 @@ impl Choice {
         let self_binder = proto.self_binder;
         let arg_binder = proto.arg_binder.unwrap().var;
         env.push(&arg_binder);
-        let controllers = Expr::from_proto(env, proto.controllers.unwrap());
+        let controllers = Expr::from_proto(proto.controllers.unwrap(), env);
         env.pop(&arg_binder);
         env.push_many(&[&self_binder, &arg_binder]);
-        let consequence = Expr::from_proto(env, proto.update.unwrap());
+        let consequence = Expr::from_proto(proto.update.unwrap(), env);
         env.pop_many(&[&self_binder, &arg_binder]);
         Choice {
             name,
@@ -733,9 +731,9 @@ impl DefTemplate {
         let name = DottedName::from_proto(proto.tycon.unwrap());
         let this_binder = proto.param;
         env.push(&this_binder);
-        let precondtion = Expr::from_proto(env, proto.precond.unwrap());
-        let signatories = Expr::from_proto(env, proto.signatories.unwrap());
-        let observers = Expr::from_proto(env, proto.observers.unwrap());
+        let precondtion = Expr::from_proto(proto.precond.unwrap(), env);
+        let signatories = Expr::from_proto(proto.signatories.unwrap(), env);
+        let observers = Expr::from_proto(proto.observers.unwrap(), env);
         let choices = proto
             .choices
             .into_iter()
@@ -764,22 +762,21 @@ pub struct Module {
 }
 
 impl Module {
-    fn from_proto(proto: daml_lf_1::Module, self_package_id: PackageId) -> Self {
+    fn from_proto(proto: daml_lf_1::Module, env: &mut Env) -> Self {
         let name = DottedName::from_proto(proto.name.unwrap());
         let values = proto
             .values
             .into_iter()
             .map(|x| {
-                let y = DefValue::from_proto(x, self_package_id.clone());
+                let y = DefValue::from_proto(x, env);
                 (y.name.clone(), y)
             })
             .collect();
-        let mut env = Env::new(self_package_id);
         let templates = proto
             .templates
             .into_iter()
             .map(|template_proto| {
-                let template = DefTemplate::from_proto(template_proto, &mut env);
+                let template = DefTemplate::from_proto(template_proto, env);
                 (template.name.clone(), template)
             })
             .collect();
@@ -803,14 +800,17 @@ impl Package {
         let id = proto.hash;
         let modules = match payload.Sum.unwrap() {
             daml_lf::ArchivePayload_oneof_Sum::daml_lf_0(_) => panic!("DAML-LF 0.x not supported"),
-            daml_lf::ArchivePayload_oneof_Sum::daml_lf_1(proto) => proto
-                .modules
-                .into_iter()
-                .map(|x| {
-                    let y = Module::from_proto(x, id.clone());
-                    (y.name.clone(), y)
-                })
-                .collect(),
+            daml_lf::ArchivePayload_oneof_Sum::daml_lf_1(payload_proto) => {
+                let mut env = Env::new(id.clone());
+                payload_proto
+                    .modules
+                    .into_iter()
+                    .map(|module_proto| {
+                        let module = Module::from_proto(module_proto, &mut env);
+                        (module.name.clone(), module)
+                    })
+                    .collect()
+            }
         };
         Package { id, modules }
     }
