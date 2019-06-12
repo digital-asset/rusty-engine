@@ -9,7 +9,7 @@ use crate::value::{ContractId, Value};
 #[derive(Debug)]
 enum Contract<'a> {
     Active {
-        template_ref: &'a TypeCon,
+        template_ref: &'a TypeConRef,
         payload: Rc<Value<'a>>,
     },
     #[allow(dead_code)]
@@ -30,7 +30,7 @@ impl<'a> Store<'a> {
         }
     }
 
-    pub fn create(&mut self, template_ref: &'a TypeCon, payload: Rc<Value<'a>>) -> ContractId {
+    pub fn create(&mut self, template_ref: &'a TypeConRef, payload: Rc<Value<'a>>) -> ContractId {
         let contract_id = ContractId::new(self.next_contract_id);
         let contract = Contract::Active {
             template_ref,
@@ -41,7 +41,7 @@ impl<'a> Store<'a> {
         contract_id
     }
 
-    pub fn fetch(&self, template_ref: &'a TypeCon, contract_id: &ContractId) -> Rc<Value<'a>> {
+    pub fn fetch(&self, template_ref: &'a TypeConRef, contract_id: &ContractId) -> Rc<Value<'a>> {
         let contract = self
             .contracts
             .get(contract_id)
@@ -61,7 +61,7 @@ impl<'a> Store<'a> {
         }
     }
 
-    pub fn archive(&mut self, template_ref: &'a TypeCon, contract_id: &ContractId) {
+    pub fn archive(&mut self, template_ref: &'a TypeConRef, contract_id: &ContractId) {
         let contract = self
             .contracts
             .get_mut(contract_id)

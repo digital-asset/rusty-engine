@@ -27,9 +27,7 @@ fn make_entry_point(world: &World) -> Expr {
     Expr::Val {
         module_ref: ModuleRef {
             package_id: world.main.clone(),
-            module_name: DottedName {
-                segments: vec![String::from("Main")],
-            },
+            module_name: String::from("Main"),
         },
         name: String::from("main"),
     }

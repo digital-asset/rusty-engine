@@ -5,7 +5,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use crate::ast::{Builtin, Expr, TypeCon};
+use crate::ast::{Builtin, Expr, TypeConRef};
 
 #[derive(Clone, Debug)]
 pub struct Env<'a> {
@@ -16,14 +16,14 @@ pub struct Env<'a> {
 #[derive(Debug, Clone)]
 pub enum Prim<'a> {
     Builtin(Builtin),
-    RecCon(&'a TypeCon, &'a Vec<String>),
-    RecProj(&'a TypeCon, &'a String),
-    RecUpd(&'a TypeCon, &'a String),
-    VariantCon(&'a TypeCon, &'a String),
+    RecCon(&'a TypeConRef, &'a Vec<String>),
+    RecProj(&'a TypeConRef, &'a String),
+    RecUpd(&'a TypeConRef, &'a String),
+    VariantCon(&'a TypeConRef, &'a String),
     Lam(&'a Expr, Env<'a>),
-    Create(&'a TypeCon),
-    Fetch(&'a TypeCon),
-    Exercise(&'a TypeCon, &'a String),
+    Create(&'a TypeConRef),
+    Fetch(&'a TypeConRef),
+    Exercise(&'a TypeConRef, &'a String),
 }
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -40,8 +40,8 @@ pub enum Value<'a> {
     Text(String),
     Party(Party),
     ContractId(ContractId),
-    RecCon(&'a TypeCon, &'a Vec<String>, Vec<Rc<Value<'a>>>),
-    VariantCon(&'a TypeCon, &'a String, Rc<Value<'a>>),
+    RecCon(&'a TypeConRef, &'a Vec<String>, Vec<Rc<Value<'a>>>),
+    VariantCon(&'a TypeConRef, &'a String, Rc<Value<'a>>),
     Nil,
     Cons(Rc<Value<'a>>, Rc<Value<'a>>),
     None,

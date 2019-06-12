@@ -23,7 +23,7 @@ enum Kont<'a> {
     ArgVal(Rc<Value<'a>>),
     Fun(Prim<'a>, Vec<Rc<Value<'a>>>, usize),
     Match(&'a Vec<Alt>),
-    Let(&'a Var, &'a Expr),
+    Let(&'a Binder, &'a Expr),
     EqualList(Rc<Value<'a>>, ValueListIter<'a>, ValueListIter<'a>),
 }
 

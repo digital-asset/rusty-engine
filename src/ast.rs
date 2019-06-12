@@ -8,12 +8,12 @@ use crate::protos::da::daml_lf;
 use crate::protos::da::daml_lf_1;
 
 mod debruijn {
-    use super::{PackageId, Var};
+    use super::{Binder, PackageId};
     use std::collections::HashMap;
 
     pub struct Env {
         pub self_package_id: PackageId,
-        rev_indices: HashMap<super::Var, Vec<usize>>,
+        rev_indices: HashMap<super::Binder, Vec<usize>>,
         depth: usize,
     }
 
@@ -40,7 +40,7 @@ mod debruijn {
         }
 
         // TODO(MH): Use iterators.
-        pub fn push_many(&mut self, vars: &[&Var]) {
+        pub fn push_many(&mut self, vars: &[&Binder]) {
             for var in vars {
                 self.push(var);
             }
@@ -51,7 +51,7 @@ mod debruijn {
             self.depth -= 1;
         }
 
-        pub fn pop_many(&mut self, vars: &[&Var]) {
+        pub fn pop_many(&mut self, vars: &[&Binder]) {
             for var in vars {
                 self.pop(var);
             }
@@ -61,33 +61,18 @@ mod debruijn {
 
 use self::debruijn::Env;
 
-pub type Var = String;
+pub type Binder = String;
 
 pub type PackageId = String;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct DottedName {
-    pub segments: Vec<String>,
-}
-
-impl fmt::Display for DottedName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.segments.join("."))
-    }
-}
-
-impl DottedName {
-    fn from_proto(proto: daml_lf_1::DottedName) -> DottedName {
-        DottedName {
-            segments: proto.segments.into_vec(),
-        }
-    }
+pub fn dotted_name_from_proto(proto: daml_lf_1::DottedName) -> String {
+    proto.segments.into_vec().join(".")
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct ModuleRef {
     pub package_id: PackageId,
-    pub module_name: DottedName,
+    pub module_name: String,
 }
 
 impl fmt::Display for ModuleRef {
@@ -104,7 +89,7 @@ impl ModuleRef {
             PackageRef_oneof_Sum::field_self(_) => env.self_package_id.clone(),
             PackageRef_oneof_Sum::package_id(id) => id,
         };
-        let module_name = DottedName::from_proto(proto.module_name.unwrap());
+        let module_name = dotted_name_from_proto(proto.module_name.unwrap());
         ModuleRef {
             package_id,
             module_name,
@@ -113,16 +98,16 @@ impl ModuleRef {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct TypeCon {
+pub struct TypeConRef {
     module_ref: ModuleRef,
-    name: DottedName,
+    name: String,
 }
 
-impl TypeCon {
-    fn from_proto(proto: daml_lf_1::TypeConName, env: &Env) -> TypeCon {
+impl TypeConRef {
+    fn from_proto(proto: daml_lf_1::TypeConName, env: &Env) -> TypeConRef {
         let module_ref = ModuleRef::from_proto(proto.module.unwrap(), env);
-        let name = DottedName::from_proto(proto.name.unwrap());
-        TypeCon { module_ref, name }
+        let name = dotted_name_from_proto(proto.name.unwrap());
+        TypeConRef { module_ref, name }
     }
 }
 
@@ -308,13 +293,13 @@ impl PrimLit {
 #[derive(Debug)]
 pub enum Pat {
     Default,
-    Variant(String, Var),
+    Variant(String, Binder),
     Unit,
     Bool(bool),
     Nil,
-    Cons(Var, Var),
+    Cons(Binder, Binder),
     None,
-    Some(Var),
+    Some(Binder),
 }
 
 impl Pat {
@@ -337,7 +322,7 @@ impl Pat {
         }
     }
 
-    fn binders(&self) -> Vec<&Var> {
+    fn binders(&self) -> Vec<&Binder> {
         match self {
             Pat::Default => vec![],
             Pat::Variant(_, x) => vec![x],
@@ -374,7 +359,7 @@ impl Alt {
 #[derive(Debug)]
 pub enum Expr {
     Var {
-        name: Var,
+        name: Binder,
         index: usize,
     },
     Val {
@@ -384,23 +369,23 @@ pub enum Expr {
     Builtin(Builtin),
     PrimLit(PrimLit),
     RecCon {
-        tycon: TypeCon,
+        tycon: TypeConRef,
         fields: Vec<String>,
         exprs: Vec<Expr>,
     },
     RecProj {
-        tycon: TypeCon,
+        tycon: TypeConRef,
         field: String,
         record: Box<Expr>,
     },
     RecUpd {
-        tycon: TypeCon,
+        tycon: TypeConRef,
         field: String,
         record: Box<Expr>,
         value: Box<Expr>,
     },
     VariantCon {
-        tycon: TypeCon,
+        tycon: TypeConRef,
         con: String,
         arg: Box<Expr>,
     },
@@ -409,7 +394,7 @@ pub enum Expr {
         args: Vec<Expr>,
     },
     Lam {
-        params: Vec<Var>,
+        params: Vec<Binder>,
         body: Box<Expr>,
     },
     Case {
@@ -417,20 +402,20 @@ pub enum Expr {
         alts: Vec<Alt>,
     },
     Let {
-        binder: Var,
+        binder: Binder,
         bound: Box<Expr>,
         body: Box<Expr>,
     },
     Create {
-        template_ref: TypeCon,
+        template_ref: TypeConRef,
         payload: Box<Expr>,
     },
     Fetch {
-        template_ref: TypeCon,
+        template_ref: TypeConRef,
         contract_id: Box<Expr>,
     },
     Exercise {
-        template_ref: TypeCon,
+        template_ref: TypeConRef,
         choice: String,
         contract_id: Box<Expr>,
         arg: Box<Expr>,
@@ -462,7 +447,7 @@ impl Expr {
             }),
             prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(x)),
             rec_con(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
+                let tycon = TypeConRef::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
                 let mut fields = Vec::new();
                 fields.reserve(x.fields.len());
                 let mut exprs = Vec::new();
@@ -478,7 +463,7 @@ impl Expr {
                 }
             }
             rec_proj(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
+                let tycon = TypeConRef::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
                 let field = x.field;
                 let record = Self::from_proto_ptr(x.record, env);
                 Expr::RecProj {
@@ -488,7 +473,7 @@ impl Expr {
                 }
             }
             rec_upd(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
+                let tycon = TypeConRef::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
                 let field = x.field;
                 let record = Self::from_proto_ptr(x.record, env);
                 let value = Self::from_proto_ptr(x.update, env);
@@ -500,7 +485,7 @@ impl Expr {
                 }
             }
             variant_con(x) => {
-                let tycon = TypeCon::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
+                let tycon = TypeConRef::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
                 let con = x.variant_con;
                 let arg = Self::from_proto_ptr(x.variant_arg, env);
                 Expr::VariantCon { tycon, con, arg }
@@ -518,10 +503,10 @@ impl Expr {
             }
             ty_app(x) => Self::from_proto(x.expr.unwrap(), env),
             abs(x) => {
-                let params: Vec<Var> = x.param.into_iter().map(|x| x.var).collect();
+                let params: Vec<Binder> = x.param.into_iter().map(|x| x.var).collect();
                 let body = {
                     // TODO(MH): Remove this abomination.
-                    let binders: Vec<&Var> = params.iter().collect();
+                    let binders: Vec<&Binder> = params.iter().collect();
                     env.push_many(&binders);
                     let body = Self::from_proto_ptr(x.body, env);
                     env.pop_many(&binders);
@@ -645,7 +630,7 @@ impl Expr {
             }
             embed_expr(_) => Expr::Unsupported("Expr::Embed"),
             create(create_proto) => {
-                let template_ref = TypeCon::from_proto(create_proto.template.unwrap(), env);
+                let template_ref = TypeConRef::from_proto(create_proto.template.unwrap(), env);
                 let payload = Expr::from_proto_ptr(create_proto.expr, env);
                 Expr::Create {
                     template_ref,
@@ -653,7 +638,7 @@ impl Expr {
                 }
             }
             fetch(fetch_proto) => {
-                let template_ref = TypeCon::from_proto(fetch_proto.template.unwrap(), env);
+                let template_ref = TypeConRef::from_proto(fetch_proto.template.unwrap(), env);
                 let contract_id = Expr::from_proto_ptr(fetch_proto.cid, env);
                 Expr::Fetch {
                     template_ref,
@@ -661,7 +646,7 @@ impl Expr {
                 }
             }
             exercise(exercise_proto) => {
-                let template_ref = TypeCon::from_proto(exercise_proto.template.unwrap(), env);
+                let template_ref = TypeConRef::from_proto(exercise_proto.template.unwrap(), env);
                 let choice = exercise_proto.choice;
                 let contract_id = Expr::from_proto_ptr(exercise_proto.cid, env);
                 let arg = Expr::from_proto_ptr(exercise_proto.arg, env);
@@ -767,8 +752,8 @@ impl DefValue {
 pub struct Choice {
     pub name: String,
     pub consuming: bool,
-    pub self_binder: Var,
-    pub arg_binder: Var,
+    pub self_binder: Binder,
+    pub arg_binder: Binder,
     pub controllers: Expr,
     pub consequence: Expr,
 }
@@ -798,8 +783,8 @@ impl Choice {
 
 #[derive(Debug)]
 pub struct DefTemplate {
-    pub name: DottedName,
-    pub this_binder: Var,
+    pub name: String,
+    pub this_binder: Binder,
     pub precondtion: Expr,
     pub signatories: Expr,
     pub observers: Expr,
@@ -808,7 +793,7 @@ pub struct DefTemplate {
 
 impl DefTemplate {
     fn from_proto(proto: daml_lf_1::DefTemplate, env: &mut Env) -> Self {
-        let name = DottedName::from_proto(proto.tycon.unwrap());
+        let name = dotted_name_from_proto(proto.tycon.unwrap());
         let this_binder = proto.param;
         env.push(&this_binder);
         let precondtion = Expr::from_proto(proto.precond.unwrap(), env);
@@ -836,14 +821,14 @@ impl DefTemplate {
 
 #[derive(Debug)]
 pub struct Module {
-    name: DottedName,
+    name: String,
     values: FnvHashMap<String, DefValue>,
-    templates: FnvHashMap<DottedName, DefTemplate>,
+    templates: FnvHashMap<String, DefTemplate>,
 }
 
 impl Module {
     fn from_proto(proto: daml_lf_1::Module, env: &mut Env) -> Self {
-        let name = DottedName::from_proto(proto.name.unwrap());
+        let name = dotted_name_from_proto(proto.name.unwrap());
         let values = proto
             .values
             .into_iter()
@@ -871,7 +856,7 @@ impl Module {
 #[derive(Debug)]
 pub struct Package {
     pub id: PackageId,
-    modules: FnvHashMap<DottedName, Module>,
+    modules: FnvHashMap<String, Module>,
 }
 
 impl Package {
@@ -958,7 +943,7 @@ impl World {
         self.get_module(module_ref).values.get(name).unwrap()
     }
 
-    pub fn get_template(&self, template_ref: &TypeCon) -> &DefTemplate {
+    pub fn get_template(&self, template_ref: &TypeConRef) -> &DefTemplate {
         self.get_module(&template_ref.module_ref)
             .templates
             .get(&template_ref.name)
