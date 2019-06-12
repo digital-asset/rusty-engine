@@ -9,7 +9,7 @@ use crate::ast::{Builtin, Expr, TypeCon};
 
 #[derive(Clone, Debug)]
 pub struct Env<'a> {
-    stack: Vec<Rc<Value<'a>>>,
+    pub stack: Vec<Rc<Value<'a>>>,
 }
 
 // NOTE(MH): Cloning this must remain cheap.
@@ -28,7 +28,7 @@ pub enum Prim<'a> {
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Party(String);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ContractId(i64);
 
 #[derive(Debug)]
@@ -89,6 +89,18 @@ impl FromStr for Party {
 }
 
 impl fmt::Display for Party {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl ContractId {
+    pub fn new(id: i64) -> Self {
+        Self(id)
+    }
+}
+
+impl fmt::Display for ContractId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }

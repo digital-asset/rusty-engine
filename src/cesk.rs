@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use crate::ast::*;
 use crate::builtin::*;
+use crate::store::Store;
 use crate::value::*;
 
 #[derive(Debug)]
@@ -30,6 +31,7 @@ enum Kont<'a> {
 pub struct State<'a> {
     ctrl: Ctrl<'a>,
     env: Env<'a>,
+    store: Store<'a>,
     kont: Vec<Kont<'a>>,
 }
 
@@ -44,10 +46,11 @@ impl<'a> Ctrl<'a> {
 }
 
 impl<'a> State<'a> {
-    pub fn init(expr: &'a Expr) -> Self {
+    pub fn init(expr: &'a Expr, store: Store<'a>) -> Self {
         State {
             ctrl: Ctrl::Expr(expr),
             env: Env::new(),
+            store,
             kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
         }
     }
@@ -244,8 +247,16 @@ impl<'a> State<'a> {
                         Ctrl::Expr(body)
                     }
 
-                    Prim::Create(_) => panic!("Unsupported: Prim::Create"),
-                    Prim::Fetch(_) => panic!("Unsupported: Prim::Fetch"),
+                    Prim::Create(template_ref) => {
+                        let payload = Rc::clone(&args[0]);
+                        let contract_id = self.store.create(template_ref, payload);
+                        Ctrl::from_value(Value::ContractId(contract_id))
+                    }
+                    Prim::Fetch(template_ref) => {
+                        let contract_id = args[0].as_contract_id();
+                        let payload = self.store.fetch(template_ref, contract_id);
+                        Ctrl::Value(payload)
+                    }
                     Prim::Exercise(_, _) => panic!("Unsupported: Prim::Exercise"),
                 },
 
@@ -265,7 +276,7 @@ impl<'a> State<'a> {
                             self.kont.push(Kont::Fun(prim.clone(), args, *missing));
                             Ctrl::Expr(arg)
                         }
-                        _ => panic!("Applying value"),
+                        v => panic!("Applying value: {:?}", v),
                     },
                     // TODO(MH): Avoid duplication with above.
                     Kont::ArgVal(arg) => match v.borrow() {
@@ -331,6 +342,15 @@ impl<'a> State<'a> {
                             };
                             Ctrl::Expr(&alt.body)
                         }
+                        Value::None => Ctrl::Expr(&alts[0].body),
+                        Value::Some(body) => {
+                            let alt = &alts[1];
+                            if let Pat::Some(_) = alt.pattern {
+                                self.kont.push(Kont::Pop(1));
+                                self.env.push(Rc::clone(body.borrow()));
+                            };
+                            Ctrl::Expr(&alt.body)
+                        }
 
                         _ => panic!("Pattern match on non-data value"),
                     },
@@ -378,6 +398,19 @@ impl<'a> State<'a> {
         match self.ctrl {
             Ctrl::Value(v) => v,
             _ => panic!("IMPOSSIBLE: final control is always a value"),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn print_debug(&self) {
+        println!("ctrl: {:?}", self.ctrl);
+        println!("env:");
+        for val in self.env.stack.iter().rev() {
+            println!("# {:?}", val);
+        }
+        println!("kont:");
+        for kont in self.kont.iter().rev() {
+            println!("$ {:?}", kont);
         }
     }
 }

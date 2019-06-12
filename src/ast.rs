@@ -84,7 +84,7 @@ impl DottedName {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ModuleRef {
     pub package_id: PackageId,
     pub module_name: DottedName,
@@ -112,7 +112,7 @@ impl ModuleRef {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct TypeCon {
     module_ref: ModuleRef,
     name: DottedName,
@@ -699,6 +699,29 @@ impl Expr {
                         _ => false,
                     })
                     .expect("Incomplete list pattern match");
+                alts.swap(1, pos);
+                alts.truncate(2);
+                alts.swap(0, 1);
+            }
+            Pat::None => {
+                let pos = alts
+                    .iter()
+                    .position(|alt| match &alt.pattern {
+                        Pat::Some(_) | Pat::Default => true,
+                        _ => false,
+                    })
+                    .expect("Incomplete optional pattern match");
+                alts.swap(1, pos);
+                alts.truncate(2);
+            }
+            Pat::Some(_) => {
+                let pos = alts
+                    .iter()
+                    .position(|alt| match &alt.pattern {
+                        Pat::None | Pat::Default => true,
+                        _ => false,
+                    })
+                    .expect("Incomplete optional pattern match");
                 alts.swap(1, pos);
                 alts.truncate(2);
                 alts.swap(0, 1);

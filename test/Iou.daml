@@ -8,17 +8,17 @@ template Iou
     issuer : Party
     owner : Party
     currency : Text
-    amount : Decimal
+    amount : Int
   where
     signatory issuer
-    ensure amount > 0.0
+    ensure amount > 0
 
     agreement show issuer <> " promises to pay " <>
               show amount <> " " <> currency <>
               " on demand to " <> show owner
 
     let updateOwner : Party -> Update (ContractId Iou)
-        updateAmount : Decimal -> Update (ContractId Iou)
+        updateAmount : Int -> Update (ContractId Iou)
         updateOwner o = create this with owner  = o
         updateAmount a = create this with amount = a
 
@@ -33,7 +33,7 @@ template Iou
           updateOwner newOwner
 
       Split : (ContractId Iou, ContractId Iou)
-        with splitAmount : Decimal
+        with splitAmount : Int
         do
           -- Split the IOU by dividing the amount.
           let restAmount = amount - splitAmount
@@ -56,5 +56,13 @@ template Iou
           -- Return the merged Iou
           updateAmount (amount + otherIou.amount)
 
-main : Update ()
-main = pure ()
+main : Update Iou
+main = do
+    let Just bank = partyFromText "Bank"
+    let Just alice = partyFromText "Alice"
+    id <- create Iou with
+        issuer = bank
+        owner = alice
+        currency = "CHF"
+        amount = 100
+    fetch id

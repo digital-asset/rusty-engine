@@ -6,12 +6,14 @@ use std::time::{Duration, Instant};
 
 mod ast;
 mod builtin;
-mod cek;
+mod cesk;
 mod protos;
+mod store;
 mod value;
 
 use crate::ast::*;
-use crate::cek::State;
+use crate::cesk::State;
+use crate::store::Store;
 use crate::value::Value;
 
 struct RunResult<'a> {
@@ -34,9 +36,12 @@ fn make_entry_point(world: &World) -> Expr {
 
 fn run<'a>(world: &'a World, entry_point: &'a Expr) -> RunResult<'a> {
     let start = Instant::now();
-    let mut state = State::init(&entry_point);
+    let store = Store::new();
+    let mut state = State::init(&entry_point, store);
     let mut count = 0;
     while !state.is_final() {
+        // state.print_debug();
+        // println!("============================================================");
         state.step(&world);
         count += 1;
     }
@@ -70,33 +75,43 @@ fn main() -> std::io::Result<()> {
 mod tests {
     use super::*;
 
-    fn dar_test(path: &str) {
+    fn dar_test<F>(path: &str, check_value: F)
+    where
+        F: FnOnce(&Value) -> (),
+    {
         let world = World::load(path).unwrap();
         let entry_point = make_entry_point(&world);
         let run_result = run(&world, &entry_point);
-        match *run_result.value {
+        check_value(&*run_result.value);
+    }
+
+    fn expect_unit(value: &Value) {
+        match value {
             Value::Unit => (),
-            _ => panic!("expected unit result"),
+            _ => panic!("expected Unit, found {:?}", value),
         }
     }
 
     #[test]
     fn queens() {
-        dar_test("test/Queens.dar");
+        dar_test("test/Queens.dar", expect_unit);
     }
 
     #[test]
     fn sort() {
-        dar_test("test/Sort.dar");
+        dar_test("test/Sort.dar", expect_unit);
     }
 
     #[test]
     fn equal_list() {
-        dar_test("test/EqualList.dar");
+        dar_test("test/EqualList.dar", expect_unit);
     }
 
     #[test]
     fn iou() {
-        dar_test("test/Iou.dar");
+        dar_test("test/Iou.dar", |value| match value {
+            Value::RecCon(..) => (),
+            _ => panic!("expected record, found {:?}", value),
+        });
     }
 }
