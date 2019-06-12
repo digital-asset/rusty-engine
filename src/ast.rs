@@ -461,7 +461,7 @@ impl Expr {
             rec_proj(x) => {
                 let tycon = TypeCon::from_proto(x.tycon.unwrap(), env);
                 let field = x.field;
-                let record = Self::from_proto_ptr(env, x.record);
+                let record = Self::from_proto_ptr(x.record, env);
                 Expr::RecProj {
                     tycon,
                     field,
@@ -471,13 +471,13 @@ impl Expr {
             variant_con(x) => {
                 let tycon = TypeCon::from_proto(x.tycon.unwrap(), env);
                 let con = x.variant_con;
-                let arg = Self::from_proto_ptr(env, x.variant_arg);
+                let arg = Self::from_proto_ptr(x.variant_arg, env);
                 Expr::VariantCon { tycon, con, arg }
             }
             tuple_con(_) => Expr::Unsupported("Expr::TupleCon"),
             tuple_proj(_) => Expr::Unsupported("Expr::TupleProj"),
             app(x) => {
-                let fun = Self::from_proto_ptr(env, x.fun);
+                let fun = Self::from_proto_ptr(x.fun, env);
                 let args = x
                     .args
                     .into_iter()
@@ -492,7 +492,7 @@ impl Expr {
                     // TODO(MH): Remove this abomination.
                     let binders: Vec<&Var> = params.iter().collect();
                     env.push_many(&binders);
-                    let body = Self::from_proto_ptr(env, x.body);
+                    let body = Self::from_proto_ptr(x.body, env);
                     env.pop_many(&binders);
                     body
                 };
@@ -500,7 +500,7 @@ impl Expr {
             }
             ty_abs(x) => Self::from_proto(x.body.unwrap(), env),
             case(x) => {
-                let scrut = Self::from_proto_ptr(env, x.scrut);
+                let scrut = Self::from_proto_ptr(x.scrut, env);
                 let alts = x
                     .alts
                     .into_iter()
@@ -513,7 +513,7 @@ impl Expr {
                 bindings.reserve(x.bindings.len());
                 for binding in x.bindings.into_vec() {
                     let binder = binding.binder.unwrap().var;
-                    let bound = Self::from_proto_ptr(env, binding.bound);
+                    let bound = Self::from_proto_ptr(binding.bound, env);
                     env.push(&binder);
                     bindings.push((binder, bound));
                 }
@@ -550,36 +550,12 @@ impl Expr {
                 }
             }
             enum_con(_) => Expr::Unsupported("Expr::EnumCon"),
-            update(x) => Self::update_from_proto(env, x),
-            scenario(_) => Expr::Unsupported("Expr::Scenario"),
-            rec_upd(_) => Expr::Unsupported("Expr::RecUpd"),
-            tuple_upd(_) => Expr::Unsupported("Expr::TupleUpd"),
-        }
-    }
-
-    fn from_proto_ptr(
-        env: &mut Env,
-        proto: ::protobuf::SingularPtrField<daml_lf_1::Expr>,
-    ) -> Box<Expr> {
-        Box::new(Expr::from_proto(proto.unwrap(), env))
-    }
-
-    fn update_from_proto(env: &mut Env, proto: daml_lf_1::Update) -> Expr {
-        use daml_lf_1::Update_oneof_Sum::*;
-        match proto.Sum.unwrap() {
-            field_pure(x) => {
-                let param = String::from("$token");
-                env.push(&param);
-                let body = Self::from_proto_ptr(env, x.expr);
-                env.pop(&param);
-                let params = vec![param];
-                Expr::Lam { params, body }
-            }
-            block(x) => {
+            update(update_proto) => {
                 let param = String::from("$token");
                 env.push(&param);
                 let token_index = env.get(&param);
-                let apply_token = |fun: Box<Expr>| {
+                let apply_token = |fun: Expr| {
+                    let fun = Box::new(fun);
                     let args = vec![Expr::Var {
                         name: param.clone(),
                         index: token_index,
@@ -587,32 +563,55 @@ impl Expr {
                     Expr::App { fun, args }
                 };
 
+                let body = Self::from_update_proto(update_proto, apply_token, env);
+
+                env.pop(&param);
+                Expr::Lam {
+                    params: vec![param],
+                    body: Box::new(body),
+                }
+            }
+            scenario(_) => Expr::Unsupported("Expr::Scenario"),
+            rec_upd(_) => Expr::Unsupported("Expr::RecUpd"),
+            tuple_upd(_) => Expr::Unsupported("Expr::TupleUpd"),
+        }
+    }
+
+    fn from_proto_ptr(
+        proto: ::protobuf::SingularPtrField<daml_lf_1::Expr>,
+        env: &mut Env,
+    ) -> Box<Expr> {
+        Box::new(Expr::from_proto(proto.unwrap(), env))
+    }
+
+    fn from_update_proto<F>(proto: daml_lf_1::Update, apply_token: F, env: &mut Env) -> Expr
+    where
+        F: Fn(Expr) -> Expr,
+    {
+        use daml_lf_1::Update_oneof_Sum::*;
+        match proto.Sum.unwrap() {
+            field_pure(x) => Self::from_proto(x.expr.unwrap(), env),
+            block(x) => {
                 let mut bindings = Vec::new();
                 bindings.reserve(x.bindings.len());
                 for binding in x.bindings.into_vec() {
                     let binder = binding.binder.unwrap().var;
-                    let bound = apply_token(Self::from_proto_ptr(env, binding.bound));
+                    let bound = apply_token(Self::from_proto(binding.bound.unwrap(), env));
                     env.push(&binder);
                     bindings.push((binder, bound));
                 }
-                let body = apply_token(Box::new(Self::from_proto(x.body.unwrap(), env)));
+                let body = apply_token(Self::from_proto(x.body.unwrap(), env));
                 for (binder, _) in bindings.iter() {
                     env.pop(binder);
                 }
-                let lam_body = bindings
+                bindings
                     .into_iter()
                     .rev()
                     .fold(body, |body, (binder, bound)| Expr::Let {
                         binder,
                         bound: Box::new(bound),
                         body: Box::new(body),
-                    });
-
-                env.pop(&param);
-                Expr::Lam {
-                    params: vec![param],
-                    body: Box::new(lam_body),
-                }
+                    })
             }
             embed_expr(_) => Expr::Unsupported("Expr::Embed"),
             create(_) => Expr::Unsupported("Expr::Create"),
