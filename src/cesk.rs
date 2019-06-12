@@ -31,7 +31,7 @@ enum Kont<'a> {
 pub struct State<'a> {
     ctrl: Ctrl<'a>,
     env: Env<'a>,
-    store: Store<'a>,
+    store: &'a mut Store<'a>,
     kont: Vec<Kont<'a>>,
 }
 
@@ -46,7 +46,7 @@ impl<'a> Ctrl<'a> {
 }
 
 impl<'a> State<'a> {
-    pub fn init(expr: &'a Expr, store: Store<'a>) -> Self {
+    pub fn init(expr: &'a Expr, store: &'a mut Store<'a>) -> Self {
         State {
             ctrl: Ctrl::Expr(expr),
             env: Env::new(),
@@ -435,9 +435,9 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn get_result(self) -> (Rc<Value<'a>>, Store<'a>) {
+    pub fn get_result(self) -> Rc<Value<'a>> {
         match self.ctrl {
-            Ctrl::Value(v) => (v, self.store),
+            Ctrl::Value(v) => v,
             _ => panic!("IMPOSSIBLE: final control is always a value"),
         }
     }

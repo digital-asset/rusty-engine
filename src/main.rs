@@ -19,7 +19,6 @@ use crate::value::Value;
 struct RunResult<'a> {
     count: i64,
     duration: Duration,
-    store: Store<'a>,
     value: Rc<Value<'a>>,
 }
 
@@ -33,9 +32,8 @@ fn make_entry_point(world: &World) -> Expr {
     }
 }
 
-fn run<'a>(world: &'a World, entry_point: &'a Expr) -> RunResult<'a> {
+fn run<'a>(world: &'a World, store: &'a mut Store<'a>, entry_point: &'a Expr) -> RunResult<'a> {
     let start = Instant::now();
-    let store = Store::new();
     let mut state = State::init(&entry_point, store);
     let mut count = 0;
     while !state.is_final() {
@@ -45,12 +43,11 @@ fn run<'a>(world: &'a World, entry_point: &'a Expr) -> RunResult<'a> {
         count += 1;
     }
     let duration = start.elapsed();
-    let (value, store) = state.get_result();
+    let value = state.get_result();
 
     RunResult {
         count,
         duration,
-        store,
         value,
     }
 }
@@ -59,13 +56,14 @@ fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
     let world = World::load(filename)?;
+    let mut store = Store::new();
 
     let entry_point = make_entry_point(&world);
-    let run_result = run(&world, &entry_point);
+    let run_result = run(&world, &mut store, &entry_point);
 
     println!(
-        "Input:  {}\nSteps:  {}\nTime:   {:?}\nResult: {:?}\nStore:\n{:?}",
-        filename, run_result.count, run_result.duration, run_result.value, run_result.store,
+        "Input:  {}\nSteps:  {}\nTime:   {:?}\nResult: {:?}",
+        filename, run_result.count, run_result.duration, run_result.value,
     );
 
     Ok(())
@@ -80,8 +78,9 @@ mod tests {
         F: FnOnce(&Value) -> (),
     {
         let world = World::load(path).unwrap();
+        let mut store = Store::new();
         let entry_point = make_entry_point(&world);
-        let run_result = run(&world, &entry_point);
+        let run_result = run(&world, &mut store, &entry_point);
         check_value(&*run_result.value);
     }
 
