@@ -19,6 +19,7 @@ use crate::value::Value;
 struct RunResult<'a> {
     count: i64,
     duration: Duration,
+    store: Store<'a>,
     value: Rc<Value<'a>>,
 }
 
@@ -46,11 +47,12 @@ fn run<'a>(world: &'a World, entry_point: &'a Expr) -> RunResult<'a> {
         count += 1;
     }
     let duration = start.elapsed();
-    let value = state.get_result();
+    let (value, store) = state.get_result();
 
     RunResult {
         count,
         duration,
+        store,
         value,
     }
 }
@@ -64,8 +66,8 @@ fn main() -> std::io::Result<()> {
     let run_result = run(&world, &entry_point);
 
     println!(
-        "Input:  {}\nSteps:  {}\nTime:   {:?}\nResult: {:?}",
-        filename, run_result.count, run_result.duration, run_result.value,
+        "Input:  {}\nSteps:  {}\nTime:   {:?}\nResult: {:?}\nStore:\n{:?}",
+        filename, run_result.count, run_result.duration, run_result.value, run_result.store,
     );
 
     Ok(())
@@ -110,8 +112,8 @@ mod tests {
     #[test]
     fn iou() {
         dar_test("test/Iou.dar", |value| match value {
-            Value::RecCon(..) => (),
-            _ => panic!("expected record, found {:?}", value),
+            Value::Int64(n) => assert_eq!(*n, 100),
+            _ => panic!("expected Int64, found {:?}", value),
         });
     }
 }

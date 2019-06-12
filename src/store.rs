@@ -36,7 +36,7 @@ impl<'a> Store<'a> {
             template_ref,
             payload,
         };
-        self.contracts.insert(contract_id, contract);
+        self.contracts.insert(contract_id.clone(), contract);
         self.next_contract_id += 1;
         contract_id
     }
@@ -53,6 +53,26 @@ impl<'a> Store<'a> {
             } => {
                 if template_ref == *stored_template_ref {
                     Rc::clone(payload)
+                } else {
+                    panic!("type mismatch for contract id: {}", contract_id)
+                }
+            }
+            Contract::Archived => panic!("contract id already archived: {}", contract_id),
+        }
+    }
+
+    pub fn archive(&mut self, template_ref: &'a TypeCon, contract_id: &ContractId) {
+        let contract = self
+            .contracts
+            .get_mut(contract_id)
+            .unwrap_or_else(|| panic!("unknown contract id: {}", contract_id));
+        match contract {
+            Contract::Active {
+                template_ref: stored_template_ref,
+                ..
+            } => {
+                if template_ref == *stored_template_ref {
+                    *contract = Contract::Archived
                 } else {
                     panic!("type mismatch for contract id: {}", contract_id)
                 }

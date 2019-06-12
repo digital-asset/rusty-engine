@@ -112,6 +112,17 @@ impl<'a> State<'a> {
                     Ctrl::from_prim(Prim::RecProj(tycon, field), 1)
                 }
 
+                Expr::RecUpd {
+                    tycon,
+                    field,
+                    record,
+                    value,
+                } => {
+                    self.kont.push(Kont::Arg(&value));
+                    self.kont.push(Kont::Arg(&record));
+                    Ctrl::from_prim(Prim::RecUpd(tycon, field), 2)
+                }
+
                 Expr::VariantCon { tycon, con, arg } => {
                     self.kont.push(Kont::Arg(arg.borrow()));
                     Ctrl::from_prim(Prim::VariantCon(tycon, con), 1)
@@ -236,6 +247,16 @@ impl<'a> State<'a> {
                             panic!("RecProj not on RecCon")
                         }
                     }
+                    Prim::RecUpd(_tycon, field) => {
+                        if let Value::RecCon(tycon, fields, vals) = args[0].borrow() {
+                            let idx = fields.iter().position(|x| x == *field).unwrap();
+                            let mut vals = vals.clone();
+                            vals[idx] = Rc::clone(&args[1]);
+                            Ctrl::from_value(Value::RecCon(tycon, fields, vals))
+                        } else {
+                            panic!("RecUpd not on RecCon")
+                        }
+                    }
                     Prim::VariantCon(tycon, con) => {
                         Ctrl::from_value(Value::VariantCon(tycon, con, Rc::clone(args[0].borrow())))
                     }
@@ -257,7 +278,27 @@ impl<'a> State<'a> {
                         let payload = self.store.fetch(template_ref, contract_id);
                         Ctrl::Value(payload)
                     }
-                    Prim::Exercise(_, _) => panic!("Unsupported: Prim::Exercise"),
+                    Prim::Exercise(template_ref, choice) => {
+                        let template = world.get_template(template_ref);
+                        let choice = template.choices.get::<String>(choice).unwrap();
+
+                        let contract_id = args[0].as_contract_id();
+                        let payload = self.store.fetch(template_ref, contract_id);
+                        if choice.consuming {
+                            self.store.archive(template_ref, contract_id);
+                        }
+                        let contract_id = Rc::clone(&args[0]);
+                        let arg = Rc::clone(&args[1]);
+
+                        let mut new_env = Env::new();
+                        new_env.push(payload);
+                        new_env.push(contract_id);
+                        new_env.push(arg);
+                        let old_env = std::mem::replace(&mut self.env, new_env);
+                        self.kont.push(Kont::Dump(old_env));
+                        self.kont.push(Kont::ArgVal(Rc::new(Value::Token)));
+                        Ctrl::Expr(&choice.consequence)
+                    }
                 },
 
                 _ => match self.kont.pop().expect("Step on final state") {
@@ -394,9 +435,9 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn get_result(self) -> Rc<Value<'a>> {
+    pub fn get_result(self) -> (Rc<Value<'a>>, Store<'a>) {
         match self.ctrl {
-            Ctrl::Value(v) => v,
+            Ctrl::Value(v) => (v, self.store),
             _ => panic!("IMPOSSIBLE: final control is always a value"),
         }
     }

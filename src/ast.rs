@@ -393,6 +393,12 @@ pub enum Expr {
         field: String,
         record: Box<Expr>,
     },
+    RecUpd {
+        tycon: TypeCon,
+        field: String,
+        record: Box<Expr>,
+        value: Box<Expr>,
+    },
     VariantCon {
         tycon: TypeCon,
         con: String,
@@ -479,6 +485,18 @@ impl Expr {
                     tycon,
                     field,
                     record,
+                }
+            }
+            rec_upd(x) => {
+                let tycon = TypeCon::from_proto(x.tycon.unwrap().tycon.unwrap(), env);
+                let field = x.field;
+                let record = Self::from_proto_ptr(x.record, env);
+                let value = Self::from_proto_ptr(x.update, env);
+                Expr::RecUpd {
+                    tycon,
+                    field,
+                    record,
+                    value,
                 }
             }
             variant_con(x) => {
@@ -585,7 +603,6 @@ impl Expr {
                 }
             }
             scenario(_) => Expr::Unsupported("Expr::Scenario"),
-            rec_upd(_) => Expr::Unsupported("Expr::RecUpd"),
             tuple_upd(_) => Expr::Unsupported("Expr::TupleUpd"),
         }
     }
@@ -928,15 +945,23 @@ impl World {
         Ok(world)
     }
 
-    pub fn get_value(&self, module_ref: &ModuleRef, name: &str) -> &DefValue {
+    pub fn get_module(&self, module_ref: &ModuleRef) -> &Module {
         self.packages
             .get(&module_ref.package_id)
             .unwrap_or_else(|| panic!("unknown package id: {}", &module_ref.package_id))
             .modules
             .get(&module_ref.module_name)
             .unwrap_or_else(|| panic!("unknown module ref: {}", &module_ref))
-            .values
-            .get(name)
+    }
+
+    pub fn get_value(&self, module_ref: &ModuleRef, name: &str) -> &DefValue {
+        self.get_module(module_ref).values.get(name).unwrap()
+    }
+
+    pub fn get_template(&self, template_ref: &TypeCon) -> &DefTemplate {
+        self.get_module(&template_ref.module_ref)
+            .templates
+            .get(&template_ref.name)
             .unwrap()
     }
 }

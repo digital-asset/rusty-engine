@@ -18,6 +18,7 @@ pub enum Prim<'a> {
     Builtin(Builtin),
     RecCon(&'a TypeCon, &'a Vec<String>),
     RecProj(&'a TypeCon, &'a String),
+    RecUpd(&'a TypeCon, &'a String),
     VariantCon(&'a TypeCon, &'a String),
     Lam(&'a Expr, Env<'a>),
     Create(&'a TypeCon),
@@ -28,7 +29,7 @@ pub enum Prim<'a> {
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Party(String);
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ContractId(i64);
 
 #[derive(Debug)]

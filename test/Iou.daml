@@ -56,13 +56,19 @@ template Iou
           -- Return the merged Iou
           updateAmount (amount + otherIou.amount)
 
-main : Update Iou
+main : Update Int
 main = do
     let Just bank = partyFromText "Bank"
     let Just alice = partyFromText "Alice"
-    id <- create Iou with
-        issuer = bank
-        owner = alice
-        currency = "CHF"
-        amount = 100
-    fetch id
+    let iou = Iou with
+            issuer = bank
+            owner = alice
+            currency = "CHF"
+            amount = 100
+    id <- create iou
+    (id1, id2) <- exercise id Split with splitAmount = 80
+    iou1 <- fetch id1
+    iou2 <- fetch id2
+    assert $ iou1 == iou with amount = 80
+    assert $ iou2 == iou with amount = 20
+    pure $ iou1.amount + iou2.amount
