@@ -94,4 +94,9 @@ mod tests {
     fn equal_list() {
         dar_test("test/EqualList.dar");
     }
+
+    #[test]
+    fn iou() {
+        dar_test("test/Iou.dar");
+    }
 }
