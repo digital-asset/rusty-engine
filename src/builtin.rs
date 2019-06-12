@@ -55,10 +55,19 @@ pub fn arity(builtin: Builtin) -> usize {
         LessText => 2,
         GreaterText => 2,
 
+        EqualParty => 2,
+        LeqParty => 2,
+        GeqParty => 2,
+        LessParty => 2,
+        GreaterParty => 2,
+
         Int64ToText => 1,
         TextToText => 1,
+        PartyToText => 1,
+        PartyToQuotedText => 1,
 
         Int64FromText => 1,
+        PartyFromText => 1,
 
         Cons => 2,
         Foldr => 3,
@@ -123,13 +132,25 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Value<'a> {
         LessText => Value::Bool(args[0].as_string() < args[1].as_string()),
         GreaterText => Value::Bool(args[0].as_string() > args[1].as_string()),
 
+        EqualParty => Value::Bool(args[0].as_party() == args[1].as_party()),
+        LeqParty => Value::Bool(args[0].as_party() <= args[1].as_party()),
+        GeqParty => Value::Bool(args[0].as_party() >= args[1].as_party()),
+        LessParty => Value::Bool(args[0].as_party() < args[1].as_party()),
+        GreaterParty => Value::Bool(args[0].as_party() > args[1].as_party()),
+
         Int64ToText => Value::Text(args[0].as_i64().to_string()),
         // NOTE(MH): We handle `TextToText` special to avoid cloning.
         TextToText => panic!("Builtin::TextToText is handled in step"),
+        PartyToText => Value::Text(args[0].as_party().to_string()),
+        PartyToQuotedText => Value::Text(format!("'{}'", args[0].as_party())),
 
         Int64FromText => match args[0].as_string().parse() {
             Err(_) => Value::None,
             Ok(n) => Value::Some(Rc::new(Value::Int64(n))),
+        },
+        PartyFromText => match args[0].as_string().parse() {
+            Err(_) => Value::None,
+            Ok(p) => Value::Some(Rc::new(Value::Party(p))),
         },
 
         Cons => {

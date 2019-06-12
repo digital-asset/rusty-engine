@@ -146,12 +146,22 @@ pub enum Builtin {
     LessText,
     GreaterText,
 
+    // Party comparison
+    EqualParty,
+    LeqParty,
+    GeqParty,
+    LessParty,
+    GreaterParty,
+
     // Conversion to text
     Int64ToText,
     TextToText,
+    PartyToText,
+    PartyToQuotedText,
 
     // Conversion from text
     Int64FromText,
+    PartyFromText,
 
     // List operations
     Cons,
@@ -196,10 +206,20 @@ impl Builtin {
             LESS_TEXT => LessText,
             GREATER_TEXT => GreaterText,
 
+            // Party unsupported
+            EQUAL_PARTY => EqualParty,
+            LEQ_PARTY => LeqParty,
+            GEQ_PARTY => GeqParty,
+            LESS_PARTY => LessParty,
+            GREATER_PARTY => GreaterParty,
+
             TO_TEXT_INT64 => Int64ToText,
             TO_TEXT_TEXT => TextToText,
+            TO_TEXT_PARTY => PartyToText,
+            TO_QUOTED_TEXT_PARTY => PartyToQuotedText,
 
             FROM_TEXT_INT64 => Int64FromText,
+            FROM_TEXT_PARTY => PartyFromText,
 
             FOLDR => Foldr,
             FOLDL => Foldl,
@@ -230,10 +250,6 @@ impl Builtin {
             | TO_TEXT_TIMESTAMP
             | TIMESTAMP_TO_UNIX_MICROSECONDS
             | UNIX_MICROSECONDS_TO_TIMESTAMP => Unsupported(proto),
-
-            // Party unsupported
-            EQUAL_PARTY | LEQ_PARTY | LESS_PARTY | GEQ_PARTY | GREATER_PARTY
-            | TO_QUOTED_TEXT_PARTY | TO_TEXT_PARTY | FROM_TEXT_PARTY => Unsupported(proto),
 
             // ContractId unsupported
             EQUAL_CONTRACT_ID | COERCE_CONTRACT_ID => Unsupported(proto),

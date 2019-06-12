@@ -1,7 +1,9 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 use std::borrow::Borrow;
+use std::fmt;
 use std::rc::Rc;
+use std::str::FromStr;
 
 use crate::ast::{Builtin, Expr, TypeCon};
 
@@ -20,12 +22,16 @@ pub enum Prim<'a> {
     Lam(&'a Expr, Env<'a>),
 }
 
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct Party(String);
+
 #[derive(Debug)]
 pub enum Value<'a> {
     Unit,
     Bool(bool),
     Int64(i64),
     Text(String),
+    Party(Party),
     RecCon(&'a TypeCon, &'a Vec<String>, Vec<Rc<Value<'a>>>),
     VariantCon(&'a TypeCon, &'a String, Rc<Value<'a>>),
     Nil,
@@ -66,6 +72,21 @@ impl<'a> Env<'a> {
     }
 }
 
+impl FromStr for Party {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // TODO(MH): Make sure `s` contains no forbidden characters.
+        Ok(Party(String::from(s)))
+    }
+}
+
+impl fmt::Display for Party {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl<'a> Value<'a> {
     pub fn as_bool(&self) -> bool {
         match self {
@@ -85,6 +106,13 @@ impl<'a> Value<'a> {
         match self {
             Value::Text(s) => &s,
             _ => panic!("Expected Text, found {:?}", self),
+        }
+    }
+
+    pub fn as_party(&self) -> &Party {
+        match self {
+            Value::Party(p) => &p,
+            _ => panic!("Expected Party, found {:?}", self),
         }
     }
 
