@@ -166,6 +166,10 @@ pub enum Builtin {
     LessParty,
     GreaterParty,
 
+    // ContractId operations
+    EqualContractId,
+    CoerceContractId,
+
     // Conversion to text
     Int64ToText,
     TextToText,
@@ -219,12 +223,14 @@ impl Builtin {
             LESS_TEXT => LessText,
             GREATER_TEXT => GreaterText,
 
-            // Party unsupported
             EQUAL_PARTY => EqualParty,
             LEQ_PARTY => LeqParty,
             GEQ_PARTY => GeqParty,
             LESS_PARTY => LessParty,
             GREATER_PARTY => GreaterParty,
+
+            EQUAL_CONTRACT_ID => EqualContractId,
+            COERCE_CONTRACT_ID => CoerceContractId,
 
             TO_TEXT_INT64 => Int64ToText,
             TO_TEXT_TEXT => TextToText,
@@ -263,9 +269,6 @@ impl Builtin {
             | TO_TEXT_TIMESTAMP
             | TIMESTAMP_TO_UNIX_MICROSECONDS
             | UNIX_MICROSECONDS_TO_TIMESTAMP => Unsupported(proto),
-
-            // ContractId unsupported
-            EQUAL_CONTRACT_ID | COERCE_CONTRACT_ID => Unsupported(proto),
 
             // Map unsupported
             MAP_EMPTY | MAP_INSERT | MAP_LOOKUP | MAP_DELETE | MAP_TO_LIST | MAP_SIZE => {

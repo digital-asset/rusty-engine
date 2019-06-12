@@ -61,6 +61,9 @@ pub fn arity(builtin: Builtin) -> usize {
         LessParty => 2,
         GreaterParty => 2,
 
+        EqualContractId => 2,
+        CoerceContractId => 1,
+
         Int64ToText => 1,
         TextToText => 1,
         PartyToText => 1,
@@ -137,6 +140,9 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Value<'a> {
         GeqParty => Value::Bool(args[0].as_party() >= args[1].as_party()),
         LessParty => Value::Bool(args[0].as_party() < args[1].as_party()),
         GreaterParty => Value::Bool(args[0].as_party() > args[1].as_party()),
+
+        EqualContractId => Value::Bool(args[0].as_contract_id() == args[1].as_contract_id()),
+        CoerceContractId => Value::ContractId(args[0].as_contract_id().clone()),
 
         Int64ToText => Value::Text(args[0].as_i64().to_string()),
         // NOTE(MH): We handle `TextToText` special to avoid cloning.

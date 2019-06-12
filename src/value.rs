@@ -25,6 +25,9 @@ pub enum Prim<'a> {
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Party(String);
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractId(i64);
+
 #[derive(Debug)]
 pub enum Value<'a> {
     Unit,
@@ -32,6 +35,7 @@ pub enum Value<'a> {
     Int64(i64),
     Text(String),
     Party(Party),
+    ContractId(ContractId),
     RecCon(&'a TypeCon, &'a Vec<String>, Vec<Rc<Value<'a>>>),
     VariantCon(&'a TypeCon, &'a String, Rc<Value<'a>>),
     Nil,
@@ -113,6 +117,13 @@ impl<'a> Value<'a> {
         match self {
             Value::Party(p) => &p,
             _ => panic!("Expected Party, found {:?}", self),
+        }
+    }
+
+    pub fn as_contract_id(&self) -> &ContractId {
+        match self {
+            Value::ContractId(c) => &c,
+            _ => panic!("Expected ContractId, found {:?}", self),
         }
     }
 
