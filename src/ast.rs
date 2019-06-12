@@ -1,6 +1,7 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 use fnv::FnvHashMap;
+use std::fmt;
 use std::io::*;
 
 use crate::protos::da::daml_lf;
@@ -69,6 +70,12 @@ pub struct DottedName {
     pub segments: Vec<String>,
 }
 
+impl fmt::Display for DottedName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.segments.join("."))
+    }
+}
+
 impl DottedName {
     fn from_proto(proto: daml_lf_1::DottedName) -> DottedName {
         DottedName {
@@ -81,6 +88,12 @@ impl DottedName {
 pub struct ModuleRef {
     pub package_id: PackageId,
     pub module_name: DottedName,
+}
+
+impl fmt::Display for ModuleRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.package_id, self.module_name)
+    }
 }
 
 impl ModuleRef {
@@ -673,9 +686,81 @@ impl DefValue {
 }
 
 #[derive(Debug)]
+pub struct Choice {
+    pub name: String,
+    pub consuming: bool,
+    pub self_binder: Var,
+    pub arg_binder: Var,
+    pub controllers: Expr,
+    pub consequence: Expr,
+}
+
+impl Choice {
+    fn from_proto(proto: daml_lf_1::TemplateChoice, env: &mut Env) -> Self {
+        let name = proto.name;
+        let consuming = proto.consuming;
+        let self_binder = proto.self_binder;
+        let arg_binder = proto.arg_binder.unwrap().var;
+        env.push(&arg_binder);
+        let controllers = Expr::from_proto(env, proto.controllers.unwrap());
+        env.pop(&arg_binder);
+        env.push_many(&[&self_binder, &arg_binder]);
+        let consequence = Expr::from_proto(env, proto.update.unwrap());
+        env.pop_many(&[&self_binder, &arg_binder]);
+        Choice {
+            name,
+            consuming,
+            self_binder,
+            arg_binder,
+            controllers,
+            consequence,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct DefTemplate {
+    pub name: DottedName,
+    pub this_binder: Var,
+    pub precondtion: Expr,
+    pub signatories: Expr,
+    pub observers: Expr,
+    pub choices: FnvHashMap<String, Choice>,
+}
+
+impl DefTemplate {
+    fn from_proto(proto: daml_lf_1::DefTemplate, env: &mut Env) -> Self {
+        let name = DottedName::from_proto(proto.tycon.unwrap());
+        let this_binder = proto.param;
+        env.push(&this_binder);
+        let precondtion = Expr::from_proto(env, proto.precond.unwrap());
+        let signatories = Expr::from_proto(env, proto.signatories.unwrap());
+        let observers = Expr::from_proto(env, proto.observers.unwrap());
+        let choices = proto
+            .choices
+            .into_iter()
+            .map(|choice_proto| {
+                let choice = Choice::from_proto(choice_proto, env);
+                (choice.name.clone(), choice)
+            })
+            .collect();
+        env.pop(&this_binder);
+        DefTemplate {
+            name,
+            this_binder,
+            precondtion,
+            signatories,
+            observers,
+            choices,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Module {
     name: DottedName,
     values: FnvHashMap<String, DefValue>,
+    templates: FnvHashMap<DottedName, DefTemplate>,
 }
 
 impl Module {
@@ -689,7 +774,20 @@ impl Module {
                 (y.name.clone(), y)
             })
             .collect();
-        Module { name, values }
+        let mut env = Env::new(self_package_id);
+        let templates = proto
+            .templates
+            .into_iter()
+            .map(|template_proto| {
+                let template = DefTemplate::from_proto(template_proto, &mut env);
+                (template.name.clone(), template)
+            })
+            .collect();
+        Module {
+            name,
+            values,
+            templates,
+        }
     }
 }
 
@@ -770,10 +868,10 @@ impl World {
     pub fn get_value(&self, module_ref: &ModuleRef, name: &str) -> &DefValue {
         self.packages
             .get(&module_ref.package_id)
-            .unwrap()
+            .unwrap_or_else(|| panic!("unknown package id: {}", &module_ref.package_id))
             .modules
             .get(&module_ref.module_name)
-            .unwrap()
+            .unwrap_or_else(|| panic!("unknown module ref: {}", &module_ref))
             .values
             .get(name)
             .unwrap()
