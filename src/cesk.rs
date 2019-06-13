@@ -1,5 +1,6 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+use fnv::FnvHashSet;
 use std::borrow::Borrow;
 use std::rc::Rc;
 
@@ -19,6 +20,7 @@ enum Ctrl<'a> {
 #[derive(Debug)]
 enum Kont<'a> {
     Dump(Env<'a>),
+    DumpAuth(FnvHashSet<Party>),
     Pop(usize),
     Arg(&'a Expr),
     ArgVal(Rc<Value<'a>>),
@@ -33,6 +35,7 @@ pub struct State<'a> {
     ctrl: Ctrl<'a>,
     env: Env<'a>,
     kont: Vec<Kont<'a>>,
+    auth: FnvHashSet<Party>,
 }
 
 impl<'a> Ctrl<'a> {
@@ -51,6 +54,7 @@ impl<'a> State<'a> {
             ctrl: Ctrl::Expr(expr),
             env: Env::new(),
             kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
+            auth: FnvHashSet::default(),
         }
     }
 
@@ -306,8 +310,15 @@ impl<'a> State<'a> {
                             let signatories: Vec<Party> = Value::make_list_iter(&args[1])
                                 .map(|x| x.as_party().clone())
                                 .collect();
-                            let contract_id = store.create(template_ref, payload, signatories);
-                            Ctrl::from_value(Value::ContractId(contract_id))
+                            if signatories.iter().all(|party| self.auth.contains(party)) {
+                                let contract_id = store.create(template_ref, payload, signatories);
+                                Ctrl::from_value(Value::ContractId(contract_id))
+                            } else {
+                                Ctrl::Error(format!(
+                                    "authorization missing for {}: {:?}",
+                                    template_ref, payload
+                                ))
+                            }
                         } else {
                             Ctrl::Error(format!(
                                 "precondition violated for {}: {:?}",
@@ -342,24 +353,51 @@ impl<'a> State<'a> {
                         let template = world.get_template(template_ref);
                         let choice = template.choices.get::<String>(choice_name).unwrap();
 
-                        let _controllers = &args[0];
+                        let controllers: Vec<Party> = Value::make_list_iter(&args[0])
+                            .map(|x| x.as_party().clone())
+                            .collect();
                         let contract_id = &args[1];
-                        if choice.consuming {
-                            store.archive(template_ref, contract_id.as_contract_id());
-                        }
                         let arg = self.env.pop();
-                        self.env.push(Rc::clone(contract_id));
-                        self.env.push(arg);
-                        self.kont.push(Kont::ArgVal(Rc::new(Value::Token)));
-                        Ctrl::Expr(&choice.consequence)
+
+                        if controllers.iter().all(|party| self.auth.contains(party)) {
+                            // TODO(MH): Avoid fetching contract a second time.
+                            let contract = store.fetch(template_ref, contract_id.as_contract_id());
+                            let mut new_auth: FnvHashSet<Party> = controllers.into_iter().collect();
+                            for party in &contract.signatories {
+                                new_auth.insert(party.clone());
+                            }
+
+                            if choice.consuming {
+                                store.archive(template_ref, contract_id.as_contract_id());
+                            }
+
+                            self.env.push(Rc::clone(contract_id));
+                            self.env.push(arg);
+
+                            let old_auth = std::mem::replace(&mut self.auth, new_auth);
+                            self.kont.push(Kont::DumpAuth(old_auth));
+                            self.kont.push(Kont::ArgVal(Rc::new(Value::Token)));
+                            Ctrl::Expr(&choice.consequence)
+                        } else {
+                            Ctrl::Error(format!(
+                                "authorization missing for {}@{}: {:?} {:?}",
+                                template_ref,
+                                choice_name,
+                                contract_id.as_contract_id(),
+                                arg,
+                            ))
+                        }
                     }
                     Prim::Submit { should_succeed } => {
-                        let _submitter = args[0].as_party();
+                        let submitter = args[0].as_party().clone();
+                        let mut auth = FnvHashSet::default();
+                        auth.insert(submitter);
                         let update = Rc::clone(&args[1]);
                         let state = State {
                             ctrl: Ctrl::Value(update),
                             env: Env::new(),
                             kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
+                            auth,
                         };
                         let result = state.run(world, store);
                         match result {
@@ -386,6 +424,10 @@ impl<'a> State<'a> {
                 _ => match self.kont.pop().expect("Step on final state") {
                     Kont::Dump(env) => {
                         self.env = env;
+                        Ctrl::Value(Rc::clone(&v))
+                    }
+                    Kont::DumpAuth(auth) => {
+                        self.auth = auth;
                         Ctrl::Value(Rc::clone(&v))
                     }
                     Kont::Pop(count) => {

@@ -29,7 +29,7 @@ pub enum Prim<'a> {
     Submit { should_succeed: bool },
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Party(String);
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
