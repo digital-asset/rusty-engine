@@ -26,7 +26,7 @@ fn main() {
     // until we have a fix.
     Command::new("sed")
         .arg("-i")
-        .arg("s/def_template::def_key::/super::def_template::def_key::/")
+        .arg("s/def_template::def_key::/def_key::/")
         .arg("src/protos/da/daml_lf_1.rs")
         .output()
         .expect("sed");
