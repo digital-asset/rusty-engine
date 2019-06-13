@@ -3,8 +3,7 @@
 daml 1.2
 module Main where
 
-main : Update ()
-main = do
+main = scenario do
     assert $ [1, 2] == [1, 2]
     assert $ [] == ([] : [Int])
     assert $ [1, 2] /= [1]

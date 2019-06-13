@@ -23,7 +23,6 @@ sorted = \case
   [_] -> True
   x1 :: x2 :: xs -> x1 <= x2 && sorted (x2 :: xs)
 
-main : Update ()
-main = do
+main = scenario do
   let xs = [4,1,6,2,8,3,9,0,5,7]
   isort xs === [0..9]

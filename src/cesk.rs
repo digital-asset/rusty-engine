@@ -31,7 +31,6 @@ enum Kont<'a> {
 pub struct State<'a> {
     ctrl: Ctrl<'a>,
     env: Env<'a>,
-    store: &'a mut Store<'a>,
     kont: Vec<Kont<'a>>,
 }
 
@@ -46,16 +45,15 @@ impl<'a> Ctrl<'a> {
 }
 
 impl<'a> State<'a> {
-    pub fn init(expr: &'a Expr, store: &'a mut Store<'a>) -> Self {
+    pub fn init(expr: &'a Expr) -> Self {
         State {
             ctrl: Ctrl::Expr(expr),
             env: Env::new(),
-            store,
             kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
         }
     }
 
-    pub fn step(&mut self, world: &'a World) {
+    pub fn step(&mut self, world: &'a World, store: &mut Store<'a>) {
         let old_ctrl = std::mem::replace(&mut self.ctrl, Ctrl::Evaluating);
 
         let new_ctrl = match old_ctrl {
@@ -179,6 +177,11 @@ impl<'a> State<'a> {
                     self.kont.push(Kont::Arg(contract_id));
                     Ctrl::from_prim(Prim::Exercise(template_ref, choice), 2)
                 }
+                Expr::Submit { submitter, update } => {
+                    self.kont.push(Kont::Arg(update));
+                    self.kont.push(Kont::Arg(submitter));
+                    Ctrl::from_prim(Prim::Submit, 2)
+                }
 
                 Expr::Unsupported(msg) => panic!("Unsupported: {}", msg),
             },
@@ -270,12 +273,12 @@ impl<'a> State<'a> {
 
                     Prim::Create(template_ref) => {
                         let payload = Rc::clone(&args[0]);
-                        let contract_id = self.store.create(template_ref, payload);
+                        let contract_id = store.create(template_ref, payload);
                         Ctrl::from_value(Value::ContractId(contract_id))
                     }
                     Prim::Fetch(template_ref) => {
                         let contract_id = args[0].as_contract_id();
-                        let payload = self.store.fetch(template_ref, contract_id);
+                        let payload = store.fetch(template_ref, contract_id);
                         Ctrl::Value(payload)
                     }
                     Prim::Exercise(template_ref, choice) => {
@@ -283,9 +286,9 @@ impl<'a> State<'a> {
                         let choice = template.choices.get::<String>(choice).unwrap();
 
                         let contract_id = args[0].as_contract_id();
-                        let payload = self.store.fetch(template_ref, contract_id);
+                        let payload = store.fetch(template_ref, contract_id);
                         if choice.consuming {
-                            self.store.archive(template_ref, contract_id);
+                            store.archive(template_ref, contract_id);
                         }
                         let contract_id = Rc::clone(&args[0]);
                         let arg = Rc::clone(&args[1]);
@@ -298,6 +301,18 @@ impl<'a> State<'a> {
                         self.kont.push(Kont::Dump(old_env));
                         self.kont.push(Kont::ArgVal(Rc::new(Value::Token)));
                         Ctrl::Expr(&choice.consequence)
+                    }
+                    Prim::Submit => {
+                        let _submitter = args[0].as_party();
+                        let update = Rc::clone(&args[1]);
+                        let state = State {
+                            ctrl: Ctrl::Value(update),
+                            env: Env::new(),
+                            kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
+                        };
+                        let result = state.run(world, store);
+                        store.commit();
+                        Ctrl::Value(result)
                     }
                 },
 
@@ -440,6 +455,13 @@ impl<'a> State<'a> {
             Ctrl::Value(v) => v,
             _ => panic!("IMPOSSIBLE: final control is always a value"),
         }
+    }
+
+    pub fn run(mut self, world: &'a World, store: &mut Store<'a>) -> Rc<Value<'a>> {
+        while !self.is_final() {
+            self.step(&world, store);
+        }
+        self.get_result()
     }
 
     #[allow(dead_code)]

@@ -17,7 +17,6 @@ use crate::store::Store;
 use crate::value::Value;
 
 struct RunResult<'a> {
-    count: i64,
     duration: Duration,
     value: Rc<Value<'a>>,
 }
@@ -32,23 +31,15 @@ fn make_entry_point(world: &World) -> Expr {
     }
 }
 
-fn run<'a>(world: &'a World, store: &'a mut Store<'a>, entry_point: &'a Expr) -> RunResult<'a> {
+fn run<'a>(world: &'a World, store: &mut Store<'a>, entry_point: &'a Expr) -> RunResult<'a> {
     let start = Instant::now();
-    let mut state = State::init(&entry_point, store);
-    let mut count = 0;
-    while !state.is_final() {
-        // state.print_debug();
-        // println!("============================================================");
-        state.step(&world);
-        count += 1;
-    }
+    let state = State::init(&entry_point);
+    let result = state.run(world, store);
     let duration = start.elapsed();
-    let value = state.get_result();
 
     RunResult {
-        count,
         duration,
-        value,
+        value: result,
     }
 }
 
@@ -62,8 +53,8 @@ fn main() -> std::io::Result<()> {
     let run_result = run(&world, &mut store, &entry_point);
 
     println!(
-        "Input:  {}\nSteps:  {}\nTime:   {:?}\nResult: {:?}",
-        filename, run_result.count, run_result.duration, run_result.value,
+        "Input:  {}\nTime:   {:?}\nResult: {:?}",
+        filename, run_result.duration, run_result.value,
     );
 
     Ok(())

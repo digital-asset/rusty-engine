@@ -56,8 +56,7 @@ template Iou
           -- Return the merged Iou
           updateAmount (amount + otherIou.amount)
 
-main : Update Int
-main = do
+main = scenario do
     let Just bank = partyFromText "Bank"
     let Just alice = partyFromText "Alice"
     let iou = Iou with
@@ -65,10 +64,10 @@ main = do
             owner = alice
             currency = "CHF"
             amount = 100
-    id <- create iou
-    (id1, id2) <- exercise id Split with splitAmount = 80
-    iou1 <- fetch id1
-    iou2 <- fetch id2
+    id <- submit bank do create iou
+    (id1, id2) <- submit alice do exercise id Split with splitAmount = 80
+    iou1 <- submit alice do fetch id1
+    iou2 <- submit alice do fetch id2
     assert $ iou1 == iou with amount = 80
     assert $ iou2 == iou with amount = 20
     pure $ iou1.amount + iou2.amount

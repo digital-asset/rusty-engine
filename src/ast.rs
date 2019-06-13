@@ -420,6 +420,10 @@ pub enum Expr {
         contract_id: Box<Expr>,
         arg: Box<Expr>,
     },
+    Submit {
+        submitter: Box<Expr>,
+        update: Box<Expr>,
+    },
 
     Unsupported(&'static str),
 }
@@ -587,7 +591,27 @@ impl Expr {
                     body: Box::new(body),
                 }
             }
-            scenario(_) => Expr::Unsupported("Expr::Scenario"),
+            scenario(scenario_proto) => {
+                let param = String::from("$token");
+                env.push(&param);
+                let token_index = env.get(&param);
+                let apply_token = |fun: Expr| {
+                    let fun = Box::new(fun);
+                    let args = vec![Expr::Var {
+                        name: param.clone(),
+                        index: token_index,
+                    }];
+                    Expr::App { fun, args }
+                };
+
+                let body = Self::from_scenario_proto(scenario_proto, apply_token, env);
+
+                env.pop(&param);
+                Expr::Lam {
+                    params: vec![param],
+                    body: Box::new(body),
+                }
+            }
             tuple_upd(_) => Expr::Unsupported("Expr::TupleUpd"),
         }
     }
@@ -628,7 +652,10 @@ impl Expr {
                         body: Box::new(body),
                     })
             }
-            embed_expr(_) => Expr::Unsupported("Expr::Embed"),
+            embed_expr(x) => {
+                let expr = Expr::from_proto(x.body.unwrap(), env);
+                apply_token(expr)
+            }
             create(create_proto) => {
                 let template_ref = TypeConRef::from_proto(create_proto.template.unwrap(), env);
                 let payload = Expr::from_proto_ptr(create_proto.expr, env);
@@ -660,6 +687,47 @@ impl Expr {
             get_time(_) => Expr::Unsupported("Expr::GetTime"),
             lookup_by_key(_) => Expr::Unsupported("Expr::LookupByKey"),
             fetch_by_key(_) => Expr::Unsupported("Expr::FetchByKey"),
+        }
+    }
+
+    fn from_scenario_proto<F>(proto: daml_lf_1::Scenario, apply_token: F, env: &mut Env) -> Expr
+    where
+        F: Fn(Expr) -> Expr,
+    {
+        use daml_lf_1::Scenario_oneof_Sum::*;
+        match proto.Sum {
+            None => Expr::Unsupported("Scenario::Unknown"),
+            Some(field_pure(x)) => Self::from_proto(x.expr.unwrap(), env),
+            Some(block(x)) => {
+                let mut bindings = Vec::new();
+                bindings.reserve(x.bindings.len());
+                for binding in x.bindings.into_vec() {
+                    let binder = binding.binder.unwrap().var;
+                    let bound = apply_token(Self::from_proto(binding.bound.unwrap(), env));
+                    env.push(&binder);
+                    bindings.push((binder, bound));
+                }
+                let body = apply_token(Self::from_proto(x.body.unwrap(), env));
+                for (binder, _) in bindings.iter() {
+                    env.pop(binder);
+                }
+                bindings
+                    .into_iter()
+                    .rev()
+                    .fold(body, |body, (binder, bound)| Expr::Let {
+                        binder,
+                        bound: Box::new(bound),
+                        body: Box::new(body),
+                    })
+            }
+            Some(embed_expr(_)) => Expr::Unsupported("Expr::EmbedScenario"),
+            Some(commit(x)) => {
+                let submitter = Expr::from_proto_ptr(x.party, env);
+                let update = Expr::from_proto_ptr(x.expr, env);
+                Expr::Submit { submitter, update }
+            }
+            Some(mustFailAt(_)) => Expr::Unsupported("Expr::MustFailAt"),
+            Some(get_time(_)) => Expr::Unsupported("Expr::GetTime"),
         }
     }
 

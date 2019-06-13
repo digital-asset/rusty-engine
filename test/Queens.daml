@@ -34,6 +34,5 @@ solve n =
   let ints = range 1 n
   in  solve_aux ints (replicate n ints)
 
-main : Update ()
-main = do
+main = scenario do
     length (solve 8) === 92

@@ -24,6 +24,7 @@ pub enum Prim<'a> {
     Create(&'a TypeConRef),
     Fetch(&'a TypeConRef),
     Exercise(&'a TypeConRef, &'a String),
+    Submit,
 }
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
