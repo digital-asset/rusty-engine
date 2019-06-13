@@ -70,4 +70,7 @@ main = scenario do
     iou2 <- submit alice do fetch id2
     assert $ iou1 == iou with amount = 80
     assert $ iou2 == iou with amount = 20
+
+    submitMustFail bank do create iou with amount = 0
+
     pure $ iou1.amount + iou2.amount

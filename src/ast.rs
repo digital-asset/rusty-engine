@@ -111,6 +111,12 @@ impl TypeConRef {
     }
 }
 
+impl fmt::Display for TypeConRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.module_ref, self.name)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Builtin {
     // Boolean comparison

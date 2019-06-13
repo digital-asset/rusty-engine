@@ -286,8 +286,28 @@ impl<'a> State<'a> {
 
                     Prim::Create(template_ref) => {
                         let payload = Rc::clone(&args[0]);
-                        let contract_id = store.create(template_ref, payload);
-                        Ctrl::from_value(Value::ContractId(contract_id))
+                        let template = world.get_template(template_ref);
+                        self.env.push(payload);
+                        self.kont.push(Kont::Arg(&template.signatories));
+                        self.kont.push(Kont::Arg(&template.precondtion));
+                        Ctrl::from_prim(Prim::CreateFinish(template_ref), 2)
+                    }
+                    Prim::CreateFinish(template_ref) => {
+                        let payload = self.env.pop();
+
+                        let precondtion = &args[0].as_bool();
+                        if *precondtion {
+                            let signatories: Vec<Party> = Value::make_list_iter(&args[1])
+                                .map(|x| x.as_party().clone())
+                                .collect();
+                            let contract_id = store.create(template_ref, payload, signatories);
+                            Ctrl::from_value(Value::ContractId(contract_id))
+                        } else {
+                            Ctrl::Error(format!(
+                                "precondition violated for {}: {:?}",
+                                template_ref, payload
+                            ))
+                        }
                     }
                     Prim::Fetch(template_ref) => {
                         let contract_id = args[0].as_contract_id();
@@ -351,7 +371,7 @@ impl<'a> State<'a> {
                         Ctrl::Value(Rc::clone(&v))
                     }
                     Kont::Pop(count) => {
-                        self.env.pop(count);
+                        self.env.pop_many(count);
                         Ctrl::Value(Rc::clone(&v))
                     }
                     Kont::Arg(arg) => match v.borrow() {

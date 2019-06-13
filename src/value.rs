@@ -22,12 +22,13 @@ pub enum Prim<'a> {
     VariantCon(&'a TypeConRef, &'a String),
     Lam(&'a Expr, Env<'a>),
     Create(&'a TypeConRef),
+    CreateFinish(&'a TypeConRef),
     Fetch(&'a TypeConRef),
     Exercise(&'a TypeConRef, &'a String),
     Submit { should_succeed: bool },
 }
 
-#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Party(String);
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -75,7 +76,11 @@ impl<'a> Env<'a> {
         self.stack.extend_from_slice(args);
     }
 
-    pub fn pop(&mut self, count: usize) {
+    pub fn pop(&mut self) -> Rc<Value<'a>> {
+        self.stack.pop().expect("Pop from empty stack")
+    }
+
+    pub fn pop_many(&mut self, count: usize) {
         let new_len = self.stack.len() - count;
         self.stack.truncate(new_len);
     }

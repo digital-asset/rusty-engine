@@ -2,15 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 use fnv::FnvHashMap;
 use std::rc::Rc;
+use std::vec::Vec;
 
 use crate::ast::*;
-use crate::value::{ContractId, Value};
+use crate::value::*;
 
 #[derive(Debug)]
 enum Contract<'a> {
     Active {
         template_ref: &'a TypeConRef,
         payload: Rc<Value<'a>>,
+        signatories: Vec<Party>,
     },
     #[allow(dead_code)]
     Archived,
@@ -34,6 +36,7 @@ impl<'a> Contract<'a> {
             Contract::Active {
                 template_ref,
                 payload,
+                ..
             } => {
                 if *template_ref == expected_template_ref {
                     payload
@@ -56,11 +59,17 @@ impl<'a> Store<'a> {
         }
     }
 
-    pub fn create(&mut self, template_ref: &'a TypeConRef, payload: Rc<Value<'a>>) -> ContractId {
+    pub fn create(
+        &mut self,
+        template_ref: &'a TypeConRef,
+        payload: Rc<Value<'a>>,
+        signatories: Vec<Party>,
+    ) -> ContractId {
         let contract_id = ContractId::new(self.next_pending_contract_id);
         let contract = Contract::Active {
             template_ref,
             payload,
+            signatories,
         };
         self.pending.insert(contract_id.clone(), contract);
         self.next_pending_contract_id += 1;
