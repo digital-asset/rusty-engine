@@ -179,10 +179,17 @@ impl<'a> State<'a> {
                     self.kont.push(Kont::Arg(contract_id));
                     Ctrl::from_prim(Prim::Exercise(template_ref, choice), 2)
                 }
-                Expr::Submit { submitter, update } => {
+                Expr::Submit {
+                    should_succeed,
+                    submitter,
+                    update,
+                } => {
                     self.kont.push(Kont::Arg(update));
                     self.kont.push(Kont::Arg(submitter));
-                    Ctrl::from_prim(Prim::Submit, 2)
+                    let prim = Prim::Submit {
+                        should_succeed: *should_succeed,
+                    };
+                    Ctrl::from_prim(prim, 2)
                 }
 
                 Expr::Unsupported(msg) => panic!("Unsupported: {}", msg),
@@ -308,7 +315,7 @@ impl<'a> State<'a> {
                         self.kont.push(Kont::ArgVal(Rc::new(Value::Token)));
                         Ctrl::Expr(&choice.consequence)
                     }
-                    Prim::Submit => {
+                    Prim::Submit { should_succeed } => {
                         let _submitter = args[0].as_party();
                         let update = Rc::clone(&args[1]);
                         let state = State {
@@ -316,12 +323,24 @@ impl<'a> State<'a> {
                             env: Env::new(),
                             kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
                         };
-                        match state.run(world, store) {
-                            Ok(result) => {
-                                store.commit();
-                                Ctrl::Value(result)
+                        let result = state.run(world, store);
+                        match result {
+                            Ok(value) => {
+                                if *should_succeed {
+                                    store.commit();
+                                    Ctrl::Value(value)
+                                } else {
+                                    Ctrl::Error(String::from("unexpected success"))
+                                }
                             }
-                            Err(msg) => Ctrl::Error(msg),
+                            Err(msg) => {
+                                if *should_succeed {
+                                    Ctrl::Error(msg)
+                                } else {
+                                    store.rollback();
+                                    Ctrl::from_value(Value::Unit)
+                                }
+                            }
                         }
                     }
                 },

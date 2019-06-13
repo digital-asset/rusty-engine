@@ -421,6 +421,7 @@ pub enum Expr {
         arg: Box<Expr>,
     },
     Submit {
+        should_succeed: bool,
         submitter: Box<Expr>,
         update: Box<Expr>,
     },
@@ -724,12 +725,16 @@ impl Expr {
                 let expr = Expr::from_proto(x.body.unwrap(), env);
                 apply_token(expr)
             }
-            Some(commit(x)) => {
-                let submitter = Expr::from_proto_ptr(x.party, env);
-                let update = Expr::from_proto_ptr(x.expr, env);
-                Expr::Submit { submitter, update }
-            }
-            Some(mustFailAt(_)) => Expr::Unsupported("Expr::MustFailAt"),
+            Some(commit(x)) => Expr::Submit {
+                should_succeed: true,
+                submitter: Expr::from_proto_ptr(x.party, env),
+                update: Expr::from_proto_ptr(x.expr, env),
+            },
+            Some(mustFailAt(x)) => Expr::Submit {
+                should_succeed: false,
+                submitter: Expr::from_proto_ptr(x.party, env),
+                update: Expr::from_proto_ptr(x.expr, env),
+            },
             Some(get_time(_)) => Expr::Unsupported("Expr::GetTime"),
         }
     }

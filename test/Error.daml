@@ -4,4 +4,6 @@ daml 1.2
 module Main where
 
 main = scenario do
+    let Just alice = partyFromText "Alice"
+    submitMustFail alice do abort "BANG"
     abort "BOOM"
