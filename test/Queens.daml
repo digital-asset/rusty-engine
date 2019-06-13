@@ -35,4 +35,4 @@ solve n =
   in  solve_aux ints (replicate n ints)
 
 main = scenario do
-    length (solve 8) === 92
+    length (solve 6) === 4
