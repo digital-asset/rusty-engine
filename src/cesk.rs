@@ -311,15 +311,16 @@ impl<'a> State<'a> {
                     }
                     Prim::Fetch(template_ref) => {
                         let contract_id = args[0].as_contract_id();
-                        let payload = store.fetch(template_ref, contract_id);
-                        Ctrl::Value(payload)
+                        let contract = store.fetch(template_ref, contract_id);
+                        Ctrl::Value(Rc::clone(&contract.payload))
                     }
                     Prim::Exercise(template_ref, choice) => {
                         let template = world.get_template(template_ref);
                         let choice = template.choices.get::<String>(choice).unwrap();
 
                         let contract_id = args[0].as_contract_id();
-                        let payload = store.fetch(template_ref, contract_id);
+                        let contract = store.fetch(template_ref, contract_id);
+                        let payload = Rc::clone(&contract.payload);
                         if choice.consuming {
                             store.archive(template_ref, contract_id);
                         }
