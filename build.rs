@@ -2,35 +2,32 @@
 // SPDX-License-Identifier: Apache-2.0
 extern crate protobuf_codegen_pure;
 
-use protobuf_codegen_pure::Customize;
 use std::process::Command;
 
 fn main() {
     let out_dir = "src/protos/da";
-    let input = &[
+    let inputs = &[
         "protos/da/daml_lf.proto",
         "protos/da/daml_lf_0.proto",
         "protos/da/daml_lf_1.proto",
     ];
 
     std::fs::create_dir_all(out_dir).expect("mkdir -p");
-    protobuf_codegen_pure::run(protobuf_codegen_pure::Args {
-        out_dir,
-        input,
-        includes: &["protos"],
-        customize: Customize {
-            ..Default::default()
-        },
-    })
-    .expect("protoc");
+    extern crate protobuf_codegen_pure;
 
-    // NOTE(MH): The protobuf codegen produces `#[allow(clippy)]` pragmas,
-    // which cause a clippy warning. Thus we need to patch it.
-    for file in input {
-        Command::new("sed")
-            .args(&["-i", "s/allow(clippy)/allow(clippy::all)/"])
-            .arg(String::from("src/") + &file.replace(".proto", ".rs"))
-            .output()
-            .expect("sed");
-    }
+    protobuf_codegen_pure::Args::new()
+        .out_dir(out_dir)
+        .inputs(inputs)
+        .include("protos")
+        .run()
+        .expect("protoc");
+
+    // NOTE(MH): Patch the generated Rust file to remedy an bug in the codegen
+    // until we have a fix.
+    Command::new("sed")
+        .arg("-i")
+        .arg("s/def_template::def_key::/super::def_template::def_key::/")
+        .arg("src/protos/da/daml_lf_1.rs")
+        .output()
+        .expect("sed");
 }

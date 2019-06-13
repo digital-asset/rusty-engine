@@ -83,11 +83,11 @@ impl fmt::Display for ModuleRef {
 
 impl ModuleRef {
     fn from_proto(proto: daml_lf_1::ModuleRef, env: &Env) -> Self {
-        use daml_lf_1::PackageRef_oneof_Sum;
+        use daml_lf_1::package_ref::Sum;
         let package_ref: daml_lf_1::PackageRef = proto.package_ref.unwrap();
         let package_id = match package_ref.Sum.unwrap() {
-            PackageRef_oneof_Sum::field_self(_) => env.self_package_id.clone(),
-            PackageRef_oneof_Sum::package_id(id) => id,
+            Sum::field_self(_) => env.self_package_id.clone(),
+            Sum::package_id(id) => id,
         };
         let module_name = dotted_name_from_proto(proto.module_name.unwrap());
         ModuleRef {
@@ -284,7 +284,7 @@ pub enum PrimLit {
 
 impl PrimLit {
     fn from_proto(proto: daml_lf_1::PrimLit) -> PrimLit {
-        use daml_lf_1::PrimLit_oneof_Sum::*;
+        use daml_lf_1::prim_lit::Sum::*;
         match proto.Sum.unwrap() {
             int64(x) => PrimLit::Int64(x),
             decimal(_) => PrimLit::Unsupported("PrimLit::Decimal"),
@@ -309,13 +309,13 @@ pub enum Pat {
 }
 
 impl Pat {
-    fn from_proto(proto: daml_lf_1::CaseAlt_oneof_Sum) -> Self {
-        use daml_lf_1::CaseAlt_oneof_Sum::*;
+    fn from_proto(proto: daml_lf_1::case_alt::Sum) -> Self {
+        use daml_lf_1::case_alt::Sum::*;
         use daml_lf_1::PrimCon::*;
         match proto {
             default(_) => Pat::Default,
             variant(x) => Pat::Variant(x.variant, x.binder),
-            prim_con(x) => match x {
+            prim_con(x) => match x.unwrap() {
                 CON_UNIT => Pat::Unit,
                 CON_FALSE => Pat::Bool(false),
                 CON_TRUE => Pat::Bool(true),
@@ -437,7 +437,7 @@ pub enum Expr {
 
 impl Expr {
     fn from_proto(proto: daml_lf_1::Expr, env: &mut Env) -> Expr {
-        use daml_lf_1::Expr_oneof_Sum::*;
+        use daml_lf_1::expr::Sum::*;
         use daml_lf_1::PrimCon::*;
         match proto.Sum.unwrap() {
             var(x) => {
@@ -450,8 +450,8 @@ impl Expr {
                 let name = x.name.join(".");
                 Expr::Val { module_ref, name }
             }
-            builtin(x) => Expr::Builtin(Builtin::from_proto(x)),
-            prim_con(x) => Expr::PrimLit(match x {
+            builtin(x) => Expr::Builtin(Builtin::from_proto(x.unwrap())),
+            prim_con(x) => Expr::PrimLit(match x.unwrap() {
                 CON_UNIT => PrimLit::Unit,
                 CON_FALSE => PrimLit::Bool(false),
                 CON_TRUE => PrimLit::Bool(true),
@@ -634,7 +634,7 @@ impl Expr {
     where
         F: Fn(Expr) -> Expr,
     {
-        use daml_lf_1::Update_oneof_Sum::*;
+        use daml_lf_1::update::Sum::*;
         match proto.Sum.unwrap() {
             field_pure(x) => Self::from_proto(x.expr.unwrap(), env),
             block(x) => {
@@ -701,7 +701,7 @@ impl Expr {
     where
         F: Fn(Expr) -> Expr,
     {
-        use daml_lf_1::Scenario_oneof_Sum::*;
+        use daml_lf_1::scenario::Sum::*;
         match proto.Sum {
             None => Expr::Unsupported("Scenario::Unknown"),
             Some(field_pure(x)) => Self::from_proto(x.expr.unwrap(), env),
@@ -946,8 +946,8 @@ impl Package {
         let payload: daml_lf::ArchivePayload = protobuf::parse_from_bytes(&proto.payload).unwrap();
         let id = proto.hash;
         let modules = match payload.Sum.unwrap() {
-            daml_lf::ArchivePayload_oneof_Sum::daml_lf_0(_) => panic!("DAML-LF 0.x not supported"),
-            daml_lf::ArchivePayload_oneof_Sum::daml_lf_1(payload_proto) => {
+            daml_lf::archive_payload::Sum::daml_lf_0(_) => panic!("DAML-LF 0.x not supported"),
+            daml_lf::archive_payload::Sum::daml_lf_1(payload_proto) => {
                 let mut env = Env::new(id.clone());
                 payload_proto
                     .modules

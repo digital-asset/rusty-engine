@@ -14,9 +14,13 @@ readme = "README.md"
 license = "Apache-2.0"
 
 [dependencies]
-protobuf = "2.6.2"
 fnv = "1.0.6"
 zip = "0.5.2"
 
-[build-dependencies]
-protobuf-codegen-pure = "2.6.2"
+[dependencies.protobuf]
+git = "https://github.com/stepancheg/rust-protobuf"
+rev = "0674fbba3a091667f9b345f5a785e2377adab8c4"
+
+[build-dependencies.protobuf-codegen-pure]
+git = "https://github.com/stepancheg/rust-protobuf"
+rev = "0674fbba3a091667f9b345f5a785e2377adab8c4"
