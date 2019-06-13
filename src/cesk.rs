@@ -287,7 +287,11 @@ impl<'a> State<'a> {
                     Prim::CreateCall(template_ref) => {
                         let payload = Rc::clone(&args[0]);
                         let template = world.get_template(template_ref);
-                        self.env.push(payload);
+
+                        let mut new_env = Env::new();
+                        new_env.push(payload);
+                        let old_env = std::mem::replace(&mut self.env, new_env);
+                        self.kont.push(Kont::Dump(old_env));
                         self.kont.push(Kont::Arg(&template.signatories));
                         self.kont.push(Kont::Arg(&template.precondtion));
                         Ctrl::from_prim(Prim::CreateExec(template_ref), 2)
