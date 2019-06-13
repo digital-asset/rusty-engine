@@ -160,7 +160,7 @@ impl<'a> State<'a> {
                     payload,
                 } => {
                     self.kont.push(Kont::Arg(payload));
-                    Ctrl::from_prim(Prim::Create(template_ref), 1)
+                    Ctrl::from_prim(Prim::CreateCall(template_ref), 1)
                 }
                 Expr::Fetch {
                     template_ref,
@@ -284,15 +284,15 @@ impl<'a> State<'a> {
                         Ctrl::Expr(body)
                     }
 
-                    Prim::Create(template_ref) => {
+                    Prim::CreateCall(template_ref) => {
                         let payload = Rc::clone(&args[0]);
                         let template = world.get_template(template_ref);
                         self.env.push(payload);
                         self.kont.push(Kont::Arg(&template.signatories));
                         self.kont.push(Kont::Arg(&template.precondtion));
-                        Ctrl::from_prim(Prim::CreateFinish(template_ref), 2)
+                        Ctrl::from_prim(Prim::CreateExec(template_ref), 2)
                     }
-                    Prim::CreateFinish(template_ref) => {
+                    Prim::CreateExec(template_ref) => {
                         let payload = self.env.pop();
 
                         let precondtion = &args[0].as_bool();
