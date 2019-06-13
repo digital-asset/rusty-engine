@@ -24,7 +24,8 @@ pub enum Prim<'a> {
     CreateCall(&'a TypeConRef),
     CreateExec(&'a TypeConRef),
     Fetch(&'a TypeConRef),
-    Exercise(&'a TypeConRef, &'a String),
+    ExerciseCall(&'a TypeConRef, &'a String),
+    ExerciseExec(&'a TypeConRef, &'a String),
     Submit { should_succeed: bool },
 }
 

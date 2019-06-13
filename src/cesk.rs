@@ -175,9 +175,11 @@ impl<'a> State<'a> {
                     contract_id,
                     arg,
                 } => {
+                    // TODO(MH): Lookup template and choice here instead of
+                    // multiple times further down.
                     self.kont.push(Kont::Arg(arg));
                     self.kont.push(Kont::Arg(contract_id));
-                    Ctrl::from_prim(Prim::Exercise(template_ref, choice), 2)
+                    Ctrl::from_prim(Prim::ExerciseCall(template_ref, choice), 2)
                 }
                 Expr::Submit {
                     should_succeed,
@@ -318,25 +320,36 @@ impl<'a> State<'a> {
                         let contract = store.fetch(template_ref, contract_id);
                         Ctrl::Value(Rc::clone(&contract.payload))
                     }
-                    Prim::Exercise(template_ref, choice) => {
+                    Prim::ExerciseCall(template_ref, choice_name) => {
                         let template = world.get_template(template_ref);
-                        let choice = template.choices.get::<String>(choice).unwrap();
+                        let choice = template.choices.get::<String>(choice_name).unwrap();
 
-                        let contract_id = args[0].as_contract_id();
-                        let contract = store.fetch(template_ref, contract_id);
+                        let contract_id = &args[0];
+                        let contract = store.fetch(template_ref, contract_id.as_contract_id());
                         let payload = Rc::clone(&contract.payload);
-                        if choice.consuming {
-                            store.archive(template_ref, contract_id);
-                        }
-                        let contract_id = Rc::clone(&args[0]);
                         let arg = Rc::clone(&args[1]);
 
                         let mut new_env = Env::new();
                         new_env.push(payload);
-                        new_env.push(contract_id);
                         new_env.push(arg);
                         let old_env = std::mem::replace(&mut self.env, new_env);
                         self.kont.push(Kont::Dump(old_env));
+                        self.kont.push(Kont::ArgVal(Rc::clone(contract_id)));
+                        self.kont.push(Kont::Arg(&choice.controllers));
+                        Ctrl::from_prim(Prim::ExerciseExec(template_ref, choice_name), 2)
+                    }
+                    Prim::ExerciseExec(template_ref, choice_name) => {
+                        let template = world.get_template(template_ref);
+                        let choice = template.choices.get::<String>(choice_name).unwrap();
+
+                        let _controllers = &args[0];
+                        let contract_id = &args[1];
+                        if choice.consuming {
+                            store.archive(template_ref, contract_id.as_contract_id());
+                        }
+                        let arg = self.env.pop();
+                        self.env.push(Rc::clone(contract_id));
+                        self.env.push(arg);
                         self.kont.push(Kont::ArgVal(Rc::new(Value::Token)));
                         Ctrl::Expr(&choice.consequence)
                     }
