@@ -1,8 +1,8 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 use fnv::FnvHashMap;
+use fnv::FnvHashSet;
 use std::rc::Rc;
-use std::vec::Vec;
 
 use crate::ast::*;
 use crate::value::*;
@@ -11,7 +11,7 @@ use crate::value::*;
 pub struct Contract<'a> {
     pub template_ref: &'a TypeConRef,
     pub payload: Rc<Value<'a>>,
-    pub signatories: Vec<Party>,
+    pub signatories: FnvHashSet<Party>,
 }
 
 #[derive(Debug)]
@@ -61,7 +61,7 @@ impl<'a> Store<'a> {
         &mut self,
         template_ref: &'a TypeConRef,
         payload: Rc<Value<'a>>,
-        signatories: Vec<Party>,
+        signatories: FnvHashSet<Party>,
     ) -> ContractId {
         let contract_id = ContractId::new(self.next_pending_contract_id);
         let contract = Contract {

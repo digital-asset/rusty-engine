@@ -307,7 +307,7 @@ impl<'a> State<'a> {
 
                         let precondtion = &args[0].as_bool();
                         if *precondtion {
-                            let signatories: Vec<Party> = Value::make_list_iter(&args[1])
+                            let signatories: FnvHashSet<Party> = Value::make_list_iter(&args[1])
                                 .map(|x| x.as_party().clone())
                                 .collect();
                             if signatories.iter().all(|party| self.auth.contains(party)) {
@@ -353,7 +353,7 @@ impl<'a> State<'a> {
                         let template = world.get_template(template_ref);
                         let choice = template.choices.get::<String>(choice_name).unwrap();
 
-                        let controllers: Vec<Party> = Value::make_list_iter(&args[0])
+                        let controllers: FnvHashSet<Party> = Value::make_list_iter(&args[0])
                             .map(|x| x.as_party().clone())
                             .collect();
                         let contract_id = &args[1];
@@ -362,10 +362,8 @@ impl<'a> State<'a> {
                         if controllers.iter().all(|party| self.auth.contains(party)) {
                             // TODO(MH): Avoid fetching contract a second time.
                             let contract = store.fetch(template_ref, contract_id.as_contract_id());
-                            let mut new_auth: FnvHashSet<Party> = controllers.into_iter().collect();
-                            for party in &contract.signatories {
-                                new_auth.insert(party.clone());
-                            }
+                            let mut new_auth: FnvHashSet<Party> = controllers;
+                            new_auth.extend(contract.signatories.iter().cloned());
 
                             if choice.consuming {
                                 store.archive(template_ref, contract_id.as_contract_id());
