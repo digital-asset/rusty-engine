@@ -305,25 +305,23 @@ impl<'a> State<'a> {
                     Prim::CreateExec(template_ref) => {
                         let payload = self.env.pop();
 
-                        let precondtion = &args[0].as_bool();
-                        if *precondtion {
-                            let signatories: FnvHashSet<Party> = Value::make_list_iter(&args[1])
-                                .map(|x| x.as_party().clone())
-                                .collect();
-                            if signatories.iter().all(|party| self.auth.contains(party)) {
-                                let contract_id = store.create(template_ref, payload, signatories);
-                                Ctrl::from_value(Value::ContractId(contract_id))
-                            } else {
-                                Ctrl::Error(format!(
-                                    "authorization missing for {}: {:?}",
-                                    template_ref, payload
-                                ))
-                            }
-                        } else {
+                        let precondtion: bool = args[0].as_bool();
+                        let signatories: FnvHashSet<Party> = Value::make_list_iter(&args[1])
+                            .map(|x| x.as_party().clone())
+                            .collect();
+                        if !precondtion {
                             Ctrl::Error(format!(
                                 "precondition violated for {}: {:?}",
                                 template_ref, payload
                             ))
+                        } else if !signatories.is_subset(&self.auth) {
+                            Ctrl::Error(format!(
+                                "authorization missing for {}: {:?}",
+                                template_ref, payload
+                            ))
+                        } else {
+                            let contract_id = store.create(template_ref, payload, signatories);
+                            Ctrl::from_value(Value::ContractId(contract_id))
                         }
                     }
                     Prim::Fetch(template_ref) => {
@@ -359,7 +357,15 @@ impl<'a> State<'a> {
                         let contract_id = &args[1];
                         let arg = self.env.pop();
 
-                        if controllers.iter().all(|party| self.auth.contains(party)) {
+                        if !controllers.is_subset(&self.auth) {
+                            Ctrl::Error(format!(
+                                "authorization missing for {}@{}: {:?} {:?}",
+                                template_ref,
+                                choice_name,
+                                contract_id.as_contract_id(),
+                                arg,
+                            ))
+                        } else {
                             // TODO(MH): Avoid fetching contract a second time.
                             let contract = store.fetch(template_ref, contract_id.as_contract_id());
                             let mut new_auth: FnvHashSet<Party> = controllers;
@@ -376,14 +382,6 @@ impl<'a> State<'a> {
                             self.kont.push(Kont::DumpAuth(old_auth));
                             self.kont.push(Kont::ArgVal(Rc::new(Value::Token)));
                             Ctrl::Expr(&choice.consequence)
-                        } else {
-                            Ctrl::Error(format!(
-                                "authorization missing for {}@{}: {:?} {:?}",
-                                template_ref,
-                                choice_name,
-                                contract_id.as_contract_id(),
-                                arg,
-                            ))
                         }
                     }
                     Prim::Submit { should_succeed } => {
