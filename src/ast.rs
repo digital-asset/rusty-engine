@@ -720,7 +720,10 @@ impl Expr {
                         body: Box::new(body),
                     })
             }
-            Some(embed_expr(_)) => Expr::Unsupported("Expr::EmbedScenario"),
+            Some(embed_expr(x)) => {
+                let expr = Expr::from_proto(x.body.unwrap(), env);
+                apply_token(expr)
+            }
             Some(commit(x)) => {
                 let submitter = Expr::from_proto_ptr(x.party, env);
                 let update = Expr::from_proto_ptr(x.expr, env);

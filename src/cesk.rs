@@ -13,6 +13,7 @@ enum Ctrl<'a> {
     Evaluating,
     Expr(&'a Expr),
     Value(Rc<Value<'a>>),
+    Error(String),
 }
 
 #[derive(Debug)]
@@ -57,7 +58,8 @@ impl<'a> State<'a> {
         let old_ctrl = std::mem::replace(&mut self.ctrl, Ctrl::Evaluating);
 
         let new_ctrl = match old_ctrl {
-            Ctrl::Evaluating => panic!("Control was not update after last step"),
+            Ctrl::Evaluating => panic!("Control was not updated after last step"),
+            Ctrl::Error(msg) => panic!("Interpretation continues after error: {}", msg),
 
             Ctrl::Expr(expr) => match expr {
                 Expr::Var { index, .. } => {
@@ -238,6 +240,10 @@ impl<'a> State<'a> {
                         ));
                         Ctrl::from_value(Value::Bool(true))
                     }
+                    Prim::Builtin(Builtin::Error) => {
+                        let msg = args[0].as_string().to_owned();
+                        Ctrl::Error(msg)
+                    }
                     Prim::Builtin(opcode) => Ctrl::from_value(interpret(*opcode, args)),
                     Prim::RecCon(tycon, fields) => {
                         Ctrl::from_value(Value::RecCon(tycon, fields, args.clone()))
@@ -310,9 +316,13 @@ impl<'a> State<'a> {
                             env: Env::new(),
                             kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
                         };
-                        let result = state.run(world, store);
-                        store.commit();
-                        Ctrl::Value(result)
+                        match state.run(world, store) {
+                            Ok(result) => {
+                                store.commit();
+                                Ctrl::Value(result)
+                            }
+                            Err(msg) => Ctrl::Error(msg),
+                        }
                     }
                 },
 
@@ -446,18 +456,20 @@ impl<'a> State<'a> {
                 Value::PAP(..) => false,
                 _ => self.kont.is_empty(),
             },
+            Ctrl::Error(_) => true,
             _ => false,
         }
     }
 
-    pub fn get_result(self) -> Rc<Value<'a>> {
+    pub fn get_result(self) -> Result<Rc<Value<'a>>, String> {
         match self.ctrl {
-            Ctrl::Value(v) => v,
+            Ctrl::Value(v) => Ok(v),
+            Ctrl::Error(msg) => Err(msg),
             _ => panic!("IMPOSSIBLE: final control is always a value"),
         }
     }
 
-    pub fn run(mut self, world: &'a World, store: &mut Store<'a>) -> Rc<Value<'a>> {
+    pub fn run(mut self, world: &'a World, store: &mut Store<'a>) -> Result<Rc<Value<'a>>, String> {
         while !self.is_final() {
             self.step(&world, store);
         }

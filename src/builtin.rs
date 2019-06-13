@@ -172,10 +172,7 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Value<'a> {
             let body = Rc::clone(args[0].borrow());
             Value::Some(body)
         }
-        Error => {
-            let msg = args[0].as_string();
-            panic!("User error: {}", msg)
-        }
+        Error => panic!("Builtin::Error is handled in step"),
 
         Unsupported(x) => panic!("Builtin::Unsupported {:?}", x),
     }

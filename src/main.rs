@@ -1,8 +1,7 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 use std::env;
-use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 mod ast;
 mod builtin;
@@ -14,12 +13,6 @@ mod value;
 use crate::ast::*;
 use crate::cesk::State;
 use crate::store::Store;
-use crate::value::Value;
-
-struct RunResult<'a> {
-    duration: Duration,
-    value: Rc<Value<'a>>,
-}
 
 fn make_entry_point(world: &World) -> Expr {
     Expr::Val {
@@ -31,18 +24,6 @@ fn make_entry_point(world: &World) -> Expr {
     }
 }
 
-fn run<'a>(world: &'a World, store: &mut Store<'a>, entry_point: &'a Expr) -> RunResult<'a> {
-    let start = Instant::now();
-    let state = State::init(&entry_point);
-    let result = state.run(world, store);
-    let duration = start.elapsed();
-
-    RunResult {
-        duration,
-        value: result,
-    }
-}
-
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
@@ -50,11 +31,14 @@ fn main() -> std::io::Result<()> {
     let mut store = Store::new();
 
     let entry_point = make_entry_point(&world);
-    let run_result = run(&world, &mut store, &entry_point);
+    let start = Instant::now();
+    let state = State::init(&entry_point);
+    let result = state.run(&world, &mut store);
+    let duration = start.elapsed();
 
     println!(
         "Input:  {}\nTime:   {:?}\nResult: {:?}",
-        filename, run_result.duration, run_result.value,
+        filename, duration, result,
     );
 
     Ok(())
@@ -63,22 +47,27 @@ fn main() -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::value::Value;
 
-    fn dar_test<F>(path: &str, check_value: F)
+    fn dar_test<F>(path: &str, check_result: F)
     where
-        F: FnOnce(&Value) -> (),
+        F: FnOnce(Result<&Value, String>) -> (),
     {
         let world = World::load(path).unwrap();
         let mut store = Store::new();
         let entry_point = make_entry_point(&world);
-        let run_result = run(&world, &mut store, &entry_point);
-        check_value(&*run_result.value);
+        let state = State::init(&entry_point);
+        let result = state.run(&world, &mut store);
+        match result {
+            Ok(value) => check_result(Ok(&*value)),
+            Err(msg) => check_result(Err(msg)),
+        }
     }
 
-    fn expect_unit(value: &Value) {
-        match value {
-            Value::Unit => (),
-            _ => panic!("expected Unit, found {:?}", value),
+    fn expect_unit(result: Result<&Value, String>) {
+        match result {
+            Ok(Value::Unit) => (),
+            _ => panic!("expected Unit, found {:?}", result),
         }
     }
 
@@ -99,9 +88,17 @@ mod tests {
 
     #[test]
     fn iou() {
-        dar_test("test/Iou.dar", |value| match value {
-            Value::Int64(n) => assert_eq!(*n, 100),
-            _ => panic!("expected Int64, found {:?}", value),
+        dar_test("test/Iou.dar", |result| match result {
+            Ok(Value::Int64(n)) => assert_eq!(*n, 100),
+            _ => panic!("expected Int64, found {:?}", result),
+        });
+    }
+
+    #[test]
+    fn error() {
+        dar_test("test/Error.dar", |result| match result {
+            Err(msg) => assert_eq!(msg, "BOOM"),
+            _ => panic!("expected error \"BOOM\", found {:?}", result),
         });
     }
 }
