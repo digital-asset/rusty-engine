@@ -9,17 +9,17 @@ template Iou
     issuer : Party
     owner : Party
     currency : Text
-    amount : Decimal
+    amount : Int
   where
     signatory issuer
-    ensure amount > 0.0
+    ensure amount > 0
 
     agreement show issuer <> " promises to pay " <>
               show amount <> " " <> currency <>
               " on demand to " <> show owner
 
     let updateOwner : Party -> Update (ContractId Iou)
-        updateAmount : Decimal -> Update (ContractId Iou)
+        updateAmount : Int -> Update (ContractId Iou)
         updateOwner o = create this with owner  = o
         updateAmount a = create this with amount = a
 
@@ -34,7 +34,7 @@ template Iou
           updateOwner newOwner
 
       Split : (ContractId Iou, ContractId Iou)
-        with splitAmount : Decimal
+        with splitAmount : Int
         do
           -- Split the IOU by dividing the amount.
           let restAmount = amount - splitAmount
@@ -71,18 +71,18 @@ main = scenario do
       issuer   = bank
       owner    = alice
       currency = "USD"
-      amount   = 100.0
+      amount   = 100
 
   iouBobCid <- submit bank do
     create Iou with
       issuer   = bank
       owner    = bob
       currency = "USD"
-      amount   = 30.0
+      amount   = 30
 
   -- Alice transfers some Iou's to Bob
   (split, rest) <- submit alice do
-    exercise iouAliceCid Split with splitAmount = 40.0
+    exercise iouAliceCid Split with splitAmount = 40
   iouOtherCid <- submit alice do
     exercise split Transfer with newOwner = bob
 
@@ -97,7 +97,7 @@ main = scenario do
       issuer   = bank
       owner    = alice
       currency = "USD"
-      amount   = 60.0
+      amount   = 60
 
 
   submit bob do
@@ -106,7 +106,7 @@ main = scenario do
       issuer   = bank
       owner    = bob
       currency = "USD"
-      amount   = 70.0
+      amount   = 70
 
   -- Issuer can archive Iou's they own
   iouBankCid <- submit bank do
@@ -114,7 +114,7 @@ main = scenario do
       issuer   = bank
       owner    = bank
       currency = "USD"
-      amount   = 100.0
+      amount   = 100
 
   submit bank do exercise iouBankCid Archive
   submitMustFail bank do fetch iouBankCid
@@ -129,7 +129,7 @@ main = scenario do
       issuer   = bank
       owner    = alice
       currency = "USD"
-      amount   = 50.0
+      amount   = 50
 
   -- Acme Bank can't create IOUs with a negative amount.
   submitMustFail bank do
@@ -137,10 +137,10 @@ main = scenario do
       issuer   = bank
       owner    = alice
       currency = "USD"
-      amount   = -20.0
+      amount   = -20
 
   -- SplitAmount needs to be between 0 and amount.
-  submitMustFail alice do exercise rest Split with splitAmount = 80.0
+  submitMustFail alice do exercise rest Split with splitAmount = 80
 
   -- Double spend gets prevented by archiving the contract.
   submitMustFail alice do exercise split Transfer with newOwner = charlie
@@ -166,7 +166,7 @@ main = scenario do
       issuer   = bank
       owner    = alice
       currency = "EUR"
-      amount   = 60.0
+      amount   = 60
 
   submitMustFail alice do
     exercise rest Merge with otherCid = iouEURCid

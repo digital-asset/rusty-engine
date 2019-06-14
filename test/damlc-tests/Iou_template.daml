@@ -5,10 +5,10 @@ template Iou
     issuer : Party
     owner : Party
     currency : Text      -- ^ only 3-letter symbols are allowed
-    amount : Decimal     -- ^ must be positive
+    amount : Int     -- ^ must be positive
     regulators : [Party] -- ^ `regulators` may observe any use of the `Iou`
   where
-    ensure amount > 0.0
+    ensure amount > 0
     signatory issuer
     observer regulators
     agreement
@@ -21,7 +21,7 @@ template Iou
       Split : (ContractId Iou, ContractId Iou) -- ^ splits into two `Iou`s with
                                                --   smaller amounts
         with
-          splitAmount : Decimal -- ^ must be between zero and original amount
+          splitAmount : Int -- ^ must be between zero and original amount
         do
           let restAmount = amount - splitAmount
           splitCid <- create this with amount = splitAmount
@@ -69,19 +69,19 @@ main = scenario do
       issuer     = bank
       owner      = alice
       currency   = "USD"
-      amount     = 100.0
+      amount     = 100
       regulators = [sec]
   iouBobCid   <- submit bank do
     create Iou with
       issuer     = bank
       owner      = bob
       currency   = "USD"
-      amount     = 30.0
+      amount     = 30
       regulators = [sec]
 
   -- Alice transfers some Iou's to Bob
   (split, rest) <- submit alice do
-    exercise iouAliceCid Split with splitAmount = 40.0
+    exercise iouAliceCid Split with splitAmount = 40
   iouOtherCid <- submit alice do
     exercise split Transfer with owner_ = bob
 
@@ -96,5 +96,5 @@ main = scenario do
       issuer    = bank
       owner     = alice
       currency  = "USD"
-      amount    = 60.0
+      amount    = 60
       regulators = [sec]

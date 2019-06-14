@@ -237,6 +237,7 @@ testParseInt = scenario do
   parseInt (show @Int minBound) === Some minBound
   None === parseInt "1.1234567890123456789"
 
+{- TODO(MH): Support Decimal type.
 testParseDecimal = scenario do
   None === parseDecimal ""
   None === parseDecimal "."
@@ -280,6 +281,7 @@ testParseDecimal = scenario do
   Some 1.0 === parseDecimal "01.00"
   Some 111111111111111111111111.0 === parseDecimal "111111111111111111111111"
   Some 1.123456789 === parseDecimal "1.123456789"
+-}
 
 
 testReverse = scenario do

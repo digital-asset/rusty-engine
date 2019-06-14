@@ -1,5 +1,5 @@
 -- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
--- SPDX-License-Identifier: Apache-2.0
+-- SPDX-License-Identifier: Apache-2
 
 -- An IOU to be proposed using the generic proposal workflow.
 -- @SINCE-LF 1.5
@@ -15,7 +15,7 @@ import ProposalDSL
 data Iou = Iou with
     issuer : Party
     owner : Party
-    amount : Decimal
+    amount : Int
   deriving (Eq, Show)
 
 instance IouInstance => Template Iou where
@@ -42,7 +42,7 @@ class IouInstance where
   observerIou : Iou -> [Party]
   observerIou this@Iou{..} = []
   ensureIou : Iou -> Bool
-  ensureIou this@Iou{..} = amount > 0.0
+  ensureIou this@Iou{..} = amount > 0
   agreementIou : Iou -> Text
   agreementIou this@Iou{..} =
       show issuer <> " owns " <> show owner <> " CHF " <> show amount
@@ -86,7 +86,7 @@ instance ProposalInstance Iou where
 test = scenario do
   alice <- getParty "alice"
   bank <- getParty "bank"
-  let iou = Iou with issuer = bank; owner = alice; amount = 10.0
+  let iou = Iou with issuer = bank; owner = alice; amount = 10
   let prop = Proposal with asset = iou; receivers = [alice]; name = "present"
   propId <- submit bank do
     create prop
