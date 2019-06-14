@@ -73,8 +73,9 @@ fn main() -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fnv::FnvHashMap;
 
-    fn dar_test(path: &str) {
+    fn dar_test(path: &str, expected_failures: &FnvHashMap<(&str, &str), &str>) {
         let world = World::load(path).unwrap();
         let main_package = world.main_package();
 
@@ -86,8 +87,20 @@ mod tests {
                 let entry_point = make_entry_point(&world, module.name.clone(), value.name.clone());
                 let state = State::init(&entry_point);
                 let result = state.run(&world, &mut store);
-                if let Err(msg) = result {
-                    panic!("unexpected failure in {}: {}", test_name, msg);
+
+                let expected_failure = expected_failures.get(&(&module.name, &value.name));
+                match (result, expected_failure) {
+                    (Ok(_), None) => (),
+                    (Ok(_), Some(_)) => panic!("unexpected success in {}", test_name),
+                    (Err(msg), None) => panic!("unexpected failure in {}: {}", test_name, msg),
+                    (Err(msg), Some(pattern)) => {
+                        if !msg.contains(pattern) {
+                            panic!(
+                                "expected failure for unexpected reason in {}: {}",
+                                test_name, msg
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -95,11 +108,27 @@ mod tests {
 
     #[test]
     fn damlc_tests() {
-        dar_test("test/damlc-tests.dar");
+        let expected_failures: FnvHashMap<(&str, &str), &str> = [
+            (("HelloWorld", "main"), "Hello World!"),
+            (("PatError", "main"), "Non-exhaustive patterns in case"),
+            (("PolymorphicTest", "main"), "boom"),
+            (("Precondition", "test"), "Template pre-condition violated"),
+            (
+                ("Records", "main"),
+                "B's Company is run by B and they are 3 years old",
+            ),
+            (("RightOfUse", "example"), "authorization missing"),
+            (("Unicode", "main"), "⛄ ¯\\_(ツ)_/¯"),
+            (("UnusedLet", "main"), "BOOM"),
+        ]
+        .iter()
+        .cloned()
+        .collect();
+        dar_test("test/damlc-tests.dar", &expected_failures);
     }
 
     #[test]
     fn bond_trading() {
-        dar_test("test/bond-trading.dar");
+        dar_test("test/bond-trading.dar", &FnvHashMap::default());
     }
 }

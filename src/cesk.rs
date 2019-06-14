@@ -326,7 +326,7 @@ impl<'a> State<'a> {
                             .collect();
                         if !precondtion {
                             Ctrl::Error(format!(
-                                "precondition violated for {}: {:?}",
+                                "Template pre-condition violated for {}: {:?}",
                                 template_ref, payload
                             ))
                         } else if !signatories.is_subset(&self.auth) {
