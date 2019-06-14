@@ -19,6 +19,10 @@ fn main() {
         .out_dir(out_dir)
         .inputs(inputs)
         .include("protos")
+        .customize(protobuf_codegen_pure::Customize {
+            singular_field_option_box: Some(true),
+            ..Default::default()
+        })
         .run()
         .expect("protoc");
 
