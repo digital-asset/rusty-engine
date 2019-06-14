@@ -99,8 +99,14 @@ impl FromStr for Party {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // TODO(MH): Make sure `s` contains no forbidden characters.
-        Ok(Party(String::from(s)))
+        fn is_party_char(c: char) -> bool {
+            c.is_ascii_alphanumeric() || c == ' ' || c == '-' || c == '_' || c == ':'
+        }
+        if !s.is_empty() && s.chars().all(is_party_char) {
+            Ok(Party(String::from(s)))
+        } else {
+            Err(format!("Invalid party name: '{}'", s))
+        }
     }
 }
 

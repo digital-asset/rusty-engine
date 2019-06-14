@@ -110,6 +110,7 @@ mod tests {
     fn damlc_tests() {
         let expected_failures: FnvHashMap<(&str, &str), &str> = [
             (("EnumFromThenTo", "main"), "enumFromThenTo: from == then"),
+            (("GetPartyError", "main"), "Invalid party name:"),
             (("HelloWorld", "main"), "Hello World!"),
             (("Lazy", "main"), "Hello World!"),
             (("PatError", "main"), "Non-exhaustive patterns in case"),
