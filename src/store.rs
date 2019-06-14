@@ -33,16 +33,16 @@ impl<'a> Entry<'a> {
         &self,
         expected_template_ref: &'a TypeConRef,
         contract_id: &ContractId,
-    ) -> &Contract<'a> {
+    ) -> Result<&Contract<'a>, String> {
         match self {
             Entry::Active(contract) => {
                 if contract.template_ref == expected_template_ref {
-                    contract
+                    Ok(contract)
                 } else {
                     panic!("type mismatch for contract id: {}", contract_id)
                 }
             }
-            Entry::Archived => panic!("contract id already archived: {}", contract_id),
+            Entry::Archived => Err(format!("contract id already archived: {}", contract_id)),
         }
     }
 }
@@ -75,20 +75,31 @@ impl<'a> Store<'a> {
         contract_id
     }
 
-    pub fn fetch(&self, template_ref: &'a TypeConRef, contract_id: &ContractId) -> &Contract<'a> {
-        let entry = self
+    pub fn fetch(
+        &self,
+        template_ref: &'a TypeConRef,
+        contract_id: &ContractId,
+    ) -> Result<&Contract<'a>, String> {
+        let entry_opt = self
             .pending
             .get(contract_id)
-            .or_else(|| self.committed.get(contract_id))
-            .unwrap_or_else(|| panic!("unknown contract id: {}", contract_id));
-        entry.get_typechecked(template_ref, contract_id)
+            .or_else(|| self.committed.get(contract_id));
+        match entry_opt {
+            None => Err(format!("unknown contract id: {}", contract_id)),
+            Some(entry) => entry.get_typechecked(template_ref, contract_id),
+        }
     }
 
-    pub fn archive(&mut self, template_ref: &'a TypeConRef, contract_id: &ContractId) {
-        let _contract = self.fetch(template_ref, contract_id);
+    pub fn archive(
+        &mut self,
+        template_ref: &'a TypeConRef,
+        contract_id: &ContractId,
+    ) -> Result<(), String> {
+        self.fetch(template_ref, contract_id)?;
         // TODO(MH): There's no need to clone the contract id when it is
         // already present in the pending contracts.
         self.pending.insert(contract_id.clone(), Entry::Archived);
+        Ok(())
     }
 
     pub fn commit(&mut self) {

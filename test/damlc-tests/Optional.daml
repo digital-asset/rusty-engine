@@ -40,11 +40,11 @@ testCatOptionals = scenario do
 testListToOptional = scenario do
   Some 1 === listToOptional [1]
   Some "ab" === listToOptional ["ab", "cd"]
-  None === listToOptional ([] : [Decimal])
+  None === listToOptional ([] : [Int])
 
 testOptionalToList = scenario do
   [1] === optionalToList (Some 1)
-  [] === optionalToList (None : Optional Decimal)
+  [] === optionalToList (None : Optional Int)
 
 testFromOptional = scenario do
   1 === fromOptional 0 (Some 1)

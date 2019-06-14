@@ -47,6 +47,16 @@ impl<'a> Ctrl<'a> {
     fn from_prim(prim: Prim<'a>, arity: usize) -> Self {
         Ctrl::Value(Rc::new(Value::PAP(prim, Vec::new(), arity)))
     }
+
+    fn catch<F>(f: F) -> Self
+    where
+        F: FnOnce() -> Result<Self, String>,
+    {
+        match f() {
+            Err(msg) => Ctrl::Error(msg),
+            Ok(ctrl) => ctrl,
+        }
+    }
 }
 
 impl<'a> State<'a> {
@@ -339,17 +349,17 @@ impl<'a> State<'a> {
                             Ctrl::from_value(Value::ContractId(contract_id))
                         }
                     }
-                    Prim::Fetch(template_ref) => {
+                    Prim::Fetch(template_ref) => Ctrl::catch(|| {
                         let contract_id = args[0].as_contract_id();
-                        let contract = store.fetch(template_ref, contract_id);
-                        Ctrl::Value(Rc::clone(&contract.payload))
-                    }
-                    Prim::ExerciseCall(template_ref, choice_name) => {
+                        let contract = store.fetch(template_ref, contract_id)?;
+                        Ok(Ctrl::Value(Rc::clone(&contract.payload)))
+                    }),
+                    Prim::ExerciseCall(template_ref, choice_name) => Ctrl::catch(|| {
                         let template = world.get_template(template_ref);
                         let choice = template.choices.get::<String>(choice_name).unwrap();
 
                         let contract_id = &args[0];
-                        let contract = store.fetch(template_ref, contract_id.as_contract_id());
+                        let contract = store.fetch(template_ref, contract_id.as_contract_id())?;
                         let payload = Rc::clone(&contract.payload);
                         let arg = Rc::clone(&args[1]);
 
@@ -360,9 +370,12 @@ impl<'a> State<'a> {
                         self.kont.push(Kont::Dump(old_env));
                         self.kont.push(Kont::ArgVal(Rc::clone(contract_id)));
                         self.kont.push(Kont::Arg(&choice.controllers));
-                        Ctrl::from_prim(Prim::ExerciseExec(template_ref, choice_name), 2)
-                    }
-                    Prim::ExerciseExec(template_ref, choice_name) => {
+                        Ok(Ctrl::from_prim(
+                            Prim::ExerciseExec(template_ref, choice_name),
+                            2,
+                        ))
+                    }),
+                    Prim::ExerciseExec(template_ref, choice_name) => Ctrl::catch(|| {
                         let template = world.get_template(template_ref);
                         let choice = template.choices.get::<String>(choice_name).unwrap();
 
@@ -373,7 +386,7 @@ impl<'a> State<'a> {
                         let arg = self.env.pop();
 
                         if !controllers.is_subset(&self.auth) {
-                            Ctrl::Error(format!(
+                            Err(format!(
                                 "authorization missing for {}@{}: {:?} {:?}",
                                 template_ref,
                                 choice_name,
@@ -382,12 +395,13 @@ impl<'a> State<'a> {
                             ))
                         } else {
                             // TODO(MH): Avoid fetching contract a second time.
-                            let contract = store.fetch(template_ref, contract_id.as_contract_id());
+                            let contract =
+                                store.fetch(template_ref, contract_id.as_contract_id())?;
                             let mut new_auth: FnvHashSet<Party> = controllers;
                             new_auth.extend(contract.signatories.iter().cloned());
 
                             if choice.consuming {
-                                store.archive(template_ref, contract_id.as_contract_id());
+                                store.archive(template_ref, contract_id.as_contract_id())?;
                             }
 
                             self.env.push(Rc::clone(contract_id));
@@ -396,9 +410,9 @@ impl<'a> State<'a> {
                             let old_auth = std::mem::replace(&mut self.auth, new_auth);
                             self.kont.push(Kont::DumpAuth(old_auth));
                             self.kont.push(Kont::ArgVal(Rc::new(Value::Token)));
-                            Ctrl::Expr(&choice.consequence)
+                            Ok(Ctrl::Expr(&choice.consequence))
                         }
-                    }
+                    }),
                     Prim::Submit { should_succeed } => {
                         let submitter = args[0].as_party().clone();
                         let mut auth = FnvHashSet::default();
