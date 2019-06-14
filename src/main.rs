@@ -109,6 +109,7 @@ mod tests {
     #[test]
     fn damlc_tests() {
         let expected_failures: FnvHashMap<(&str, &str), &str> = [
+            (("BadCodePoint", "test"), "invalid code point"),
             (("EnumFromThenTo", "main"), "enumFromThenTo: from == then"),
             (("GetPartyError", "main"), "Invalid party name:"),
             (("HelloWorld", "main"), "Hello World!"),

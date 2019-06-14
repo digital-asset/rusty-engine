@@ -49,6 +49,8 @@ pub fn arity(builtin: Builtin) -> usize {
         ImplodeText => 1,
         ExplodeText => 1,
         Sha256Text => 1,
+        TextToCodePoints => 1,
+        TextFromCodePoints => 1,
 
         EqualText => 2,
         LeqText => 2,
@@ -170,6 +172,27 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Result<Value<'
             let arg = args[0].as_string();
             let hash = sha2::Sha256::digest(arg.as_bytes());
             Ok(Value::Text(hex::encode(hash)))
+        }
+        // FIXME(MH): Both primitives do not operate with unicode code points
+        // but with unicode scalar values. This is against the DAML-LF spec.
+        TextToCodePoints => Ok(Value::from_iter(
+            args[0]
+                .as_string()
+                .chars()
+                .map(|c| Rc::new(Value::Int64(c as i64))),
+        )),
+        TextFromCodePoints => {
+            use std::convert::TryFrom;
+            let t: Result<String, i64> = Value::make_list_iter(&args[0])
+                .map(|v| {
+                    let i = v.as_i64();
+                    let w = u32::try_from(i).map_err(|_| i)?;
+                    let c = char::try_from(w).map_err(|_| i)?;
+                    Ok(c)
+                })
+                .collect();
+            let t = t.map_err(|i| format!("invalid code point: {}", i))?;
+            Ok(Value::Text(t))
         }
 
         EqualText => Ok(Value::Bool(args[0].as_string() == args[1].as_string())),

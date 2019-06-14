@@ -163,6 +163,14 @@ impl fmt::Display for Date {
 }
 
 impl<'a> Value<'a> {
+    pub fn from_iter<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Rc<Value<'a>>> + DoubleEndedIterator,
+    {
+        iter.rev()
+            .fold(Value::Nil, |tail, head| Value::Cons(head, Rc::new(tail)))
+    }
+
     pub fn as_bool(&self) -> bool {
         match self {
             Value::Bool(b) => *b,
