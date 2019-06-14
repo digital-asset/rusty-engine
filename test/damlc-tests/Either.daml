@@ -10,12 +10,12 @@ import DA.Assert
 testLefts = scenario do
   ["a", "b", "c"] === lefts [Right 1, Left "a", Left "b", Right 2, Left "c"]
   [] === lefts ([] : [Either Int Text])
-  [] === lefts ([Right 1.0] : [Either Bool Decimal])
+  [] === lefts ([Right 1] : [Either Bool Int])
 
 testRights = scenario do
   [1, 2] === rights [Right 1, Left "a", Left "b", Right 2, Left "c"]
   [] === rights ([] : [Either Int Text])
-  [] === rights ([Left False] : [Either Bool Decimal])
+  [] === rights ([Left False] : [Either Bool Int])
 
 testPartitionEithers = scenario do
   (["a", "b", "c"], [1, 2]) === partitionEithers [Right 1, Left "a", Left "b", Right 2, Left "c"]
@@ -24,12 +24,12 @@ testPartitionEithers = scenario do
   ([1], []) === partitionEithers ([Left 1] : [Either Int Bool])
 
 testIsLeft = scenario do
-  True === isLeft (Left 1.0 : Either Decimal Int)
-  False === isLeft (Right 1 : Either Decimal Int)
+  True === isLeft (Left 1 : Either Int Int)
+  False === isLeft (Right 1 : Either Int Int)
 
 testIsRight = scenario do
-  False === isRight (Left 1.0 : Either Decimal Int)
-  True === isRight (Right 1 : Either Decimal Int)
+  False === isRight (Left 1 : Either Int Int)
+  True === isRight (Right 1 : Either Int Int)
 
 testFromLeft = scenario do
   2 === fromLeft 1 (Left 2)
