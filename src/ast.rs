@@ -285,7 +285,7 @@ pub enum PrimLit {
 }
 
 impl PrimLit {
-    fn from_proto(proto: daml_lf_1::PrimLit) -> PrimLit {
+    fn from_proto(proto: Box<daml_lf_1::PrimLit>) -> PrimLit {
         use daml_lf_1::prim_lit::Sum::*;
         match proto.Sum.unwrap() {
             int64(x) => PrimLit::Int64(x),
@@ -633,7 +633,7 @@ impl Expr {
         }
     }
 
-    fn from_update_proto<F>(proto: daml_lf_1::Update, apply_token: F, env: &mut Env) -> Expr
+    fn from_update_proto<F>(proto: Box<daml_lf_1::Update>, apply_token: F, env: &mut Env) -> Expr
     where
         F: Fn(Expr) -> Expr,
     {
@@ -700,15 +700,18 @@ impl Expr {
         }
     }
 
-    fn from_scenario_proto<F>(proto: daml_lf_1::Scenario, apply_token: F, env: &mut Env) -> Expr
+    fn from_scenario_proto<F>(
+        proto: Box<daml_lf_1::Scenario>,
+        apply_token: F,
+        env: &mut Env,
+    ) -> Expr
     where
         F: Fn(Expr) -> Expr,
     {
         use daml_lf_1::scenario::Sum::*;
-        match proto.Sum {
-            None => Expr::Unsupported("Scenario::Unknown"),
-            Some(field_pure(x)) => Self::from_proto(x.expr, env),
-            Some(block(x)) => {
+        match proto.Sum.unwrap() {
+            field_pure(x) => Self::from_proto(x.expr, env),
+            block(x) => {
                 let mut bindings = Vec::new();
                 bindings.reserve(x.bindings.len());
                 for binding in x.bindings.into_vec() {
@@ -730,21 +733,23 @@ impl Expr {
                         body: Box::new(body),
                     })
             }
-            Some(embed_expr(x)) => {
+            embed_expr(x) => {
                 let expr = Self::from_proto(x.body, env);
                 apply_token(expr)
             }
-            Some(commit(x)) => Expr::Submit {
+            commit(x) => Expr::Submit {
                 should_succeed: true,
                 submitter: Self::boxed_from_proto(x.party, env),
                 update: Self::boxed_from_proto(x.expr, env),
             },
-            Some(mustFailAt(x)) => Expr::Submit {
+            mustFailAt(x) => Expr::Submit {
                 should_succeed: false,
                 submitter: Self::boxed_from_proto(x.party, env),
                 update: Self::boxed_from_proto(x.expr, env),
             },
-            Some(get_time(_)) => Expr::Unsupported("Expr::GetTime"),
+            get_time(_) => Expr::Unsupported("Expr::GetTime"),
+            pass(_) => Expr::Unsupported("Expr::PassTime"),
+            get_party(_) => Expr::Unsupported("Expr::GetParty"),
         }
     }
 

@@ -74,23 +74,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "protobuf"
 version = "3.0.0-pre"
-source = "git+https://github.com/stepancheg/rust-protobuf?rev=0674fbba3a091667f9b345f5a785e2377adab8c4#0674fbba3a091667f9b345f5a785e2377adab8c4"
+source = "git+https://github.com/hurryabit/rust-protobuf?branch=onoef-field-box#248539efb11ea9c93ba7e22192d4550634dd6a1c"
 
 [[package]]
 name = "protobuf-codegen"
 version = "3.0.0-pre"
-source = "git+https://github.com/stepancheg/rust-protobuf?rev=0674fbba3a091667f9b345f5a785e2377adab8c4#0674fbba3a091667f9b345f5a785e2377adab8c4"
+source = "git+https://github.com/hurryabit/rust-protobuf?branch=onoef-field-box#248539efb11ea9c93ba7e22192d4550634dd6a1c"
 dependencies = [
- "protobuf 3.0.0-pre (git+https://github.com/stepancheg/rust-protobuf?rev=0674fbba3a091667f9b345f5a785e2377adab8c4)",
+ "protobuf 3.0.0-pre (git+https://github.com/hurryabit/rust-protobuf?branch=onoef-field-box)",
 ]
 
 [[package]]
 name = "protobuf-codegen-pure"
 version = "3.0.0-pre"
-source = "git+https://github.com/stepancheg/rust-protobuf?rev=0674fbba3a091667f9b345f5a785e2377adab8c4#0674fbba3a091667f9b345f5a785e2377adab8c4"
+source = "git+https://github.com/hurryabit/rust-protobuf?branch=onoef-field-box#248539efb11ea9c93ba7e22192d4550634dd6a1c"
 dependencies = [
- "protobuf 3.0.0-pre (git+https://github.com/stepancheg/rust-protobuf?rev=0674fbba3a091667f9b345f5a785e2377adab8c4)",
- "protobuf-codegen 3.0.0-pre (git+https://github.com/stepancheg/rust-protobuf?rev=0674fbba3a091667f9b345f5a785e2377adab8c4)",
+ "protobuf 3.0.0-pre (git+https://github.com/hurryabit/rust-protobuf?branch=onoef-field-box)",
+ "protobuf-codegen 3.0.0-pre (git+https://github.com/hurryabit/rust-protobuf?branch=onoef-field-box)",
 ]
 
 [[package]]
@@ -103,8 +103,8 @@ name = "rusty-engine"
 version = "0.0.1"
 dependencies = [
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "protobuf 3.0.0-pre (git+https://github.com/stepancheg/rust-protobuf?rev=0674fbba3a091667f9b345f5a785e2377adab8c4)",
- "protobuf-codegen-pure 3.0.0-pre (git+https://github.com/stepancheg/rust-protobuf?rev=0674fbba3a091667f9b345f5a785e2377adab8c4)",
+ "protobuf 3.0.0-pre (git+https://github.com/hurryabit/rust-protobuf?branch=onoef-field-box)",
+ "protobuf-codegen-pure 3.0.0-pre (git+https://github.com/hurryabit/rust-protobuf?branch=onoef-field-box)",
  "zip 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -161,9 +161,9 @@ dependencies = [
 "checksum libc 0.2.43 (registry+https://github.com/rust-lang/crates.io-index)" = "76e3a3ef172f1a0b9a9ff0dd1491ae5e6c948b94479a3021819ba7d860c8645d"
 "checksum libflate 0.1.23 (registry+https://github.com/rust-lang/crates.io-index)" = "76912aa0196b6f0e06d9c43ee877be45369157c06172ade12fe20ac3ee5ffa15"
 "checksum podio 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "780fb4b6698bbf9cf2444ea5d22411cef2953f0824b98f33cf454ec5615645bd"
-"checksum protobuf 3.0.0-pre (git+https://github.com/stepancheg/rust-protobuf?rev=0674fbba3a091667f9b345f5a785e2377adab8c4)" = "<none>"
-"checksum protobuf-codegen 3.0.0-pre (git+https://github.com/stepancheg/rust-protobuf?rev=0674fbba3a091667f9b345f5a785e2377adab8c4)" = "<none>"
-"checksum protobuf-codegen-pure 3.0.0-pre (git+https://github.com/stepancheg/rust-protobuf?rev=0674fbba3a091667f9b345f5a785e2377adab8c4)" = "<none>"
+"checksum protobuf 3.0.0-pre (git+https://github.com/hurryabit/rust-protobuf?branch=onoef-field-box)" = "<none>"
+"checksum protobuf-codegen 3.0.0-pre (git+https://github.com/hurryabit/rust-protobuf?branch=onoef-field-box)" = "<none>"
+"checksum protobuf-codegen-pure 3.0.0-pre (git+https://github.com/hurryabit/rust-protobuf?branch=onoef-field-box)" = "<none>"
 "checksum redox_syscall 0.1.54 (registry+https://github.com/rust-lang/crates.io-index)" = "12229c14a0f65c4f1cb046a3b52047cdd9da1f4b30f8a39c5063c8bae515e252"
 "checksum time 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)" = "db8dcfca086c1143c9270ac42a2bbd8a7ee477b78ac8e45b19abfb0cbede4b6f"
 "checksum winapi 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "92c1eb33641e276cfa214a0522acad57be5c56b10cb348b3c5117db75f3ac4b0"

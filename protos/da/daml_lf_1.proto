@@ -916,9 +916,9 @@ message Scenario {
     Block block = 2;
     Commit commit = 3;
     Commit mustFailAt = 4;
-    // Expr pass = 5;
+    Expr pass = 5;
     Unit get_time = 6;
-    // Expr get_party = 7;
+    Expr get_party = 7;
     // embed an expression of type Scenario. note that this construct is useful
     // to explicitly mark the start of scenario execution, which is useful in
     // top level definitions. for example if we hav
