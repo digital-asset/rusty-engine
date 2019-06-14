@@ -38,10 +38,12 @@ fn main() -> std::io::Result<()> {
 
     let world = World::load(filename)?;
     let main_package = world.main_package();
+    let mut failed_tests = Vec::new();
 
     for module in main_package.modules.values().filter(use_module) {
         for value in module.values.values().filter(use_value) {
-            println!("Test:   {}:{}", module.name, value.name);
+            let test_name = format!("{}:{}", module.name, value.name);
+            println!("Test:   {}", test_name);
             let start = Instant::now();
             let mut store = Store::new();
             let entry_point = make_entry_point(&world, module.name.clone(), value.name.clone());
@@ -49,10 +51,22 @@ fn main() -> std::io::Result<()> {
             let result = state.run(&world, &mut store);
             let duration = start.elapsed();
 
+            if result.is_err() {
+                failed_tests.push(test_name);
+            }
             println!("Result: {:?}\nTime:   {:?}", result, duration);
         }
     }
 
+    if !failed_tests.is_empty() {
+        println!("Failed tests:");
+        for test_name in failed_tests {
+            println!("* {}", test_name);
+        }
+        panic!("Some tests failed");
+    }
+
+    println!("All tests passed");
     Ok(())
 }
 
