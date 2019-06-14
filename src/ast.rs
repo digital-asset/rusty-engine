@@ -991,7 +991,7 @@ impl Module {
 #[derive(Debug)]
 pub struct Package {
     pub id: PackageId,
-    modules: FnvHashMap<String, Module>,
+    pub modules: FnvHashMap<String, Module>,
 }
 
 impl Package {
@@ -1063,6 +1063,10 @@ impl World {
             .collect();
         let world = World { main, packages };
         Ok(world)
+    }
+
+    pub fn main_package(&self) -> &Package {
+        self.packages.get(&self.main).unwrap()
     }
 
     pub fn get_module(&self, module_ref: &ModuleRef) -> &Module {

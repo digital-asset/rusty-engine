@@ -27,16 +27,22 @@ fn make_entry_point(world: &World, module_name: String, scenario_name: String) -
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
-    let module_name = args[2].to_string();
-    let world = World::load(filename)?;
-    let module = world.get_module(&ModuleRef {
-        package_id: world.main.clone(),
-        module_name,
-    });
+    let module_filter: Option<&String> = args.get(2);
+    let scenario_filter: Option<&String> = args.get(2);
 
-    for value in module.values.values() {
-        if value.is_test {
-            println!("Test:   {}", value.name);
+    let use_module = |module: &&Module| {
+        module_filter.map_or(true, |module_name| module.name == *module_name)
+    };
+    let use_value = |value: &&DefValue| {
+        value.is_test && scenario_filter.map_or(true, |scenario_name| value.name == *scenario_name)
+    };
+
+    let world = World::load(filename)?;
+    let main_package = world.main_package();
+
+    for module in main_package.modules.values().filter(use_module) {
+        for value in module.values.values().filter(use_value) {
+            println!("Test:   {}:{}", module.name, value.name);
             let start = Instant::now();
             let mut store = Store::new();
             let entry_point = make_entry_point(&world, module.name.clone(), value.name.clone());
