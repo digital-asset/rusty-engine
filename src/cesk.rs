@@ -36,6 +36,7 @@ pub struct State<'a> {
     env: Env<'a>,
     kont: Vec<Kont<'a>>,
     auth: FnvHashSet<Party>,
+    time: Time,
 }
 
 impl<'a> Ctrl<'a> {
@@ -55,6 +56,7 @@ impl<'a> State<'a> {
             env: Env::new(),
             kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
             auth: FnvHashSet::default(),
+            time: Time::EPOCH,
         }
     }
 
@@ -208,6 +210,19 @@ impl<'a> State<'a> {
                         Err(msg) => Ctrl::Error(msg),
                         Ok(p) => Ctrl::from_value(Value::Party(p)),
                     },
+                    Prim::Builtin(Builtin::GetTime) => Ctrl::from_value(Value::Time(self.time)),
+                    Prim::Builtin(Builtin::AdvanceTime) => {
+                        let delta = args[0].as_i64();
+                        if delta < 0 {
+                            Ctrl::Error(format!("cannot move time backwards: {}ms", delta))
+                        } else {
+                            let time = Time::from_micros_since_epoch(
+                                i64::checked_add(self.time.to_micros_since_epoch(), delta).unwrap(),
+                            );
+                            self.time = time;
+                            Ctrl::from_value(Value::Time(time))
+                        }
+                    }
                     // TODO(MH): There's plenty of room for optimizations in foldr
                     // and foldl, but let's get something simple and correct first.
                     Prim::Builtin(Builtin::Foldr) => {
@@ -398,6 +413,7 @@ impl<'a> State<'a> {
                             env: Env::new(),
                             kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
                             auth,
+                            time: self.time,
                         };
                         let result = state.run(world, store);
                         match result {

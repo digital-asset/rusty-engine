@@ -4,7 +4,7 @@ use std::borrow::Borrow;
 use std::rc::Rc;
 
 use crate::ast::Builtin;
-use crate::value::Value;
+use crate::value::*;
 
 mod i64_aux {
     pub fn checked_exp(base: i64, exponent: i64) -> i64 {
@@ -64,10 +64,22 @@ pub fn arity(builtin: Builtin) -> usize {
         EqualContractId => 2,
         CoerceContractId => 1,
 
+        EqualTime => 2,
+        LeqTime => 2,
+        GeqTime => 2,
+        LessTime => 2,
+        GreaterTime => 2,
+
+        TimeToMicrosSinceEpoch => 1,
+        TimeFromMicrosSinceEpoch => 1,
+        GetTime => 0,
+        AdvanceTime => 1,
+
         Int64ToText => 1,
         TextToText => 1,
         PartyToText => 1,
         PartyToQuotedText => 1,
+        TimeToText => 1,
 
         Int64FromText => 1,
         PartyFromText => 1,
@@ -145,11 +157,23 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Value<'a> {
         EqualContractId => Value::Bool(args[0].as_contract_id() == args[1].as_contract_id()),
         CoerceContractId => Value::ContractId(args[0].as_contract_id().clone()),
 
+        EqualTime => Value::Bool(args[0].as_time() == args[1].as_time()),
+        LeqTime => Value::Bool(args[0].as_time() <= args[1].as_time()),
+        GeqTime => Value::Bool(args[0].as_time() >= args[1].as_time()),
+        LessTime => Value::Bool(args[0].as_time() < args[1].as_time()),
+        GreaterTime => Value::Bool(args[0].as_time() > args[1].as_time()),
+
+        TimeToMicrosSinceEpoch => Value::Int64(args[0].as_time().to_micros_since_epoch()),
+        TimeFromMicrosSinceEpoch => Value::Time(Time::from_micros_since_epoch(args[0].as_i64())),
+        GetTime => panic!("Builtin::GetTime is handled in step"),
+        AdvanceTime => panic!("Builtin::AdvanceTime is handled in step"),
+
         Int64ToText => Value::Text(args[0].as_i64().to_string()),
         // NOTE(MH): We handle `TextToText` special to avoid cloning.
         TextToText => panic!("Builtin::TextToText is handled in step"),
         PartyToText => Value::Text(args[0].as_party().to_string()),
         PartyToQuotedText => Value::Text(format!("'{}'", args[0].as_party())),
+        TimeToText => Value::Text(args[0].as_time().to_string()),
 
         Int64FromText => match args[0].as_string().parse() {
             Err(_) => Value::None,

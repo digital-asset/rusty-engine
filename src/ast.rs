@@ -162,11 +162,25 @@ pub enum Builtin {
     EqualContractId,
     CoerceContractId,
 
+    // Time comparison
+    EqualTime,
+    LeqTime,
+    GeqTime,
+    LessTime,
+    GreaterTime,
+
+    // Time operations
+    TimeToMicrosSinceEpoch,
+    TimeFromMicrosSinceEpoch,
+    GetTime,
+    AdvanceTime,
+
     // Conversion to text
     Int64ToText,
     TextToText,
     PartyToText,
     PartyToQuotedText,
+    TimeToText,
 
     // Conversion from text
     Int64FromText,
@@ -225,10 +239,20 @@ impl Builtin {
             EQUAL_CONTRACT_ID => EqualContractId,
             COERCE_CONTRACT_ID => CoerceContractId,
 
+            EQUAL_TIMESTAMP => EqualTime,
+            LEQ_TIMESTAMP => LeqTime,
+            LESS_TIMESTAMP => LessTime,
+            GEQ_TIMESTAMP => GeqTime,
+            GREATER_TIMESTAMP => GreaterTime,
+
+            TIMESTAMP_TO_UNIX_MICROSECONDS => TimeToMicrosSinceEpoch,
+            UNIX_MICROSECONDS_TO_TIMESTAMP => TimeFromMicrosSinceEpoch,
+
             TO_TEXT_INT64 => Int64ToText,
             TO_TEXT_TEXT => TextToText,
             TO_TEXT_PARTY => PartyToText,
             TO_QUOTED_TEXT_PARTY => PartyToQuotedText,
+            TO_TEXT_TIMESTAMP => TimeToText,
 
             FROM_TEXT_INT64 => Int64FromText,
             FROM_TEXT_PARTY => PartyFromText,
@@ -252,16 +276,6 @@ impl Builtin {
             // Date unsupported
             EQUAL_DATE | LEQ_DATE | LESS_DATE | GEQ_DATE | GREATER_DATE | TO_TEXT_DATE
             | DATE_TO_UNIX_DAYS | UNIX_DAYS_TO_DATE => Unsupported(proto),
-
-            // Timestamp unsupported
-            EQUAL_TIMESTAMP
-            | LEQ_TIMESTAMP
-            | LESS_TIMESTAMP
-            | GEQ_TIMESTAMP
-            | GREATER_TIMESTAMP
-            | TO_TEXT_TIMESTAMP
-            | TIMESTAMP_TO_UNIX_MICROSECONDS
-            | UNIX_MICROSECONDS_TO_TIMESTAMP => Unsupported(proto),
 
             // Map unsupported
             MAP_EMPTY | MAP_INSERT | MAP_LOOKUP | MAP_DELETE | MAP_TO_LIST | MAP_SIZE => {
@@ -695,7 +709,7 @@ impl Expr {
                     arg,
                 }
             }
-            get_time(_) => Expr::Unsupported("Expr::GetTime"),
+            get_time(_) => Expr::Builtin(Builtin::GetTime),
             lookup_by_key(_) => Expr::Unsupported("Expr::LookupByKey"),
             fetch_by_key(_) => Expr::Unsupported("Expr::FetchByKey"),
         }
@@ -748,8 +762,11 @@ impl Expr {
                 submitter: Self::boxed_from_proto(x.party, env),
                 update: Self::boxed_from_proto(x.expr, env),
             },
-            get_time(_) => Expr::Unsupported("Expr::GetTime"),
-            pass(_) => Expr::Unsupported("Expr::PassTime"),
+            get_time(_) => Expr::Builtin(Builtin::GetTime),
+            pass(x) => Expr::App {
+                fun: Box::new(Expr::Builtin(Builtin::AdvanceTime)),
+                args: vec![Self::from_proto_unboxed(*x, env)],
+            },
             get_party(x) => Expr::App {
                 fun: Box::new(Expr::Builtin(Builtin::GetParty)),
                 args: vec![Self::from_proto_unboxed(*x, env)],

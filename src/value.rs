@@ -35,6 +35,9 @@ pub struct Party(String);
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ContractId(i64);
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct Time(i64);
+
 #[derive(Debug)]
 pub enum Value<'a> {
     Unit,
@@ -43,6 +46,7 @@ pub enum Value<'a> {
     Text(String),
     Party(Party),
     ContractId(ContractId),
+    Time(Time),
     RecCon(&'a TypeConRef, &'a Vec<String>, Vec<Rc<Value<'a>>>),
     VariantCon(&'a TypeConRef, &'a String, Rc<Value<'a>>),
     Nil,
@@ -114,6 +118,24 @@ impl fmt::Display for ContractId {
     }
 }
 
+impl Time {
+    pub const EPOCH: Self = Time(0);
+
+    pub fn to_micros_since_epoch(&self) -> i64 {
+        self.0
+    }
+
+    pub fn from_micros_since_epoch(ms: i64) -> Self {
+        Self(ms)
+    }
+}
+
+impl fmt::Display for Time {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}ms SE", self.0)
+    }
+}
+
 impl<'a> Value<'a> {
     pub fn as_bool(&self) -> bool {
         match self {
@@ -147,6 +169,13 @@ impl<'a> Value<'a> {
         match self {
             Value::ContractId(c) => &c,
             _ => panic!("Expected ContractId, found {:?}", self),
+        }
+    }
+
+    pub fn as_time(&self) -> &Time {
+        match self {
+            Value::Time(t) => &t,
+            _ => panic!("Expected Time, found {:?}", self),
         }
     }
 
