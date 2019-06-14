@@ -73,63 +73,33 @@ fn main() -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::value::Value;
 
-    fn dar_test<F>(path: &str, check_result: F)
-    where
-        F: FnOnce(Result<&Value, String>) -> (),
-    {
+    fn dar_test(path: &str) {
         let world = World::load(path).unwrap();
-        let mut store = Store::new();
-        let entry_point = make_entry_point(&world, "Main".to_string(), "main".to_string());
-        let state = State::init(&entry_point);
-        let result = state.run(&world, &mut store);
-        match result {
-            Ok(value) => check_result(Ok(&*value)),
-            Err(msg) => check_result(Err(msg)),
+        let main_package = world.main_package();
+
+        for module in main_package.modules.values() {
+            for value in module.values.values().filter(|value| value.is_test) {
+                let test_name = format!("{}:{}", module.name, value.name);
+                println!("Test:   {}", test_name);
+                let mut store = Store::new();
+                let entry_point = make_entry_point(&world, module.name.clone(), value.name.clone());
+                let state = State::init(&entry_point);
+                let result = state.run(&world, &mut store);
+                if let Err(msg) = result {
+                    panic!("unexpected failure in {}: {}", test_name, msg);
+                }
+            }
         }
     }
 
-    fn expect_unit(result: Result<&Value, String>) {
-        match result {
-            Ok(Value::Unit) => (),
-            _ => panic!("expected Unit, found {:?}", result),
-        }
+    #[test]
+    fn damlc_tests() {
+        dar_test("test/damlc-tests.dar");
     }
 
     #[test]
     fn bond_trading() {
-        dar_test("test/bond-trading.dar", expect_unit);
-    }
-
-    #[test]
-    fn queens() {
-        dar_test("test/Queens.dar", expect_unit);
-    }
-
-    #[test]
-    fn sort() {
-        dar_test("test/Sort.dar", expect_unit);
-    }
-
-    #[test]
-    fn equal_list() {
-        dar_test("test/EqualList.dar", expect_unit);
-    }
-
-    #[test]
-    fn iou() {
-        dar_test("test/Iou.dar", |result| match result {
-            Ok(Value::Int64(n)) => assert_eq!(*n, 100),
-            _ => panic!("expected Int64, found {:?}", result),
-        });
-    }
-
-    #[test]
-    fn error() {
-        dar_test("test/Error.dar", |result| match result {
-            Err(msg) => assert_eq!(msg, "BOOM"),
-            _ => panic!("expected error \"BOOM\", found {:?}", result),
-        });
+        dar_test("test/bond-trading.dar");
     }
 }
