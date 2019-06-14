@@ -204,6 +204,10 @@ impl<'a> State<'a> {
             Ctrl::Value(v) => match v.borrow() {
                 Value::PAP(prim, args, 0) => match prim {
                     Prim::Builtin(Builtin::TextToText) => Ctrl::Value(Rc::clone(&args[0])),
+                    Prim::Builtin(Builtin::GetParty) => match args[0].as_string().parse() {
+                        Err(msg) => Ctrl::Error(msg),
+                        Ok(p) => Ctrl::from_value(Value::Party(p)),
+                    },
                     // TODO(MH): There's plenty of room for optimizations in foldr
                     // and foldl, but let's get something simple and correct first.
                     Prim::Builtin(Builtin::Foldr) => {

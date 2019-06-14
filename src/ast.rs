@@ -171,6 +171,7 @@ pub enum Builtin {
     // Conversion from text
     Int64FromText,
     PartyFromText,
+    GetParty,
 
     // List operations
     Cons,
@@ -749,7 +750,10 @@ impl Expr {
             },
             get_time(_) => Expr::Unsupported("Expr::GetTime"),
             pass(_) => Expr::Unsupported("Expr::PassTime"),
-            get_party(_) => Expr::Unsupported("Expr::GetParty"),
+            get_party(x) => Expr::App {
+                fun: Box::new(Expr::Builtin(Builtin::GetParty)),
+                args: vec![Self::from_proto_unboxed(*x, env)],
+            },
         }
     }
 

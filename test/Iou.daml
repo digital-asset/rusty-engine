@@ -68,8 +68,8 @@ template Iou
           updateAmount (amount + otherIou.amount)
 
 main = scenario do
-    let Just bank = partyFromText "Bank"
-    let Just alice = partyFromText "Alice"
+    bank <- getParty "Bank"
+    alice <- getParty "Alice"
     let iou = Iou with
             issuer = bank
             owner = alice

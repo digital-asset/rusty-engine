@@ -71,6 +71,7 @@ pub fn arity(builtin: Builtin) -> usize {
 
         Int64FromText => 1,
         PartyFromText => 1,
+        GetParty => 1,
 
         Cons => 2,
         Foldr => 3,
@@ -158,6 +159,7 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Value<'a> {
             Err(_) => Value::None,
             Ok(p) => Value::Some(Rc::new(Value::Party(p))),
         },
+        GetParty => panic!("Builtin::GetParty is handled in step"),
 
         Cons => {
             let head = Rc::clone(args[0].borrow());
