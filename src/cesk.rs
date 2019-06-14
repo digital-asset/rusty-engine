@@ -578,7 +578,7 @@ impl<'a> State<'a> {
     pub fn is_final(&self) -> bool {
         match self.ctrl.borrow() {
             Ctrl::Value(v) => match v.borrow() {
-                Value::PAP(..) => false,
+                Value::PAP(_, _, 0) => false,
                 _ => self.kont.is_empty(),
             },
             Ctrl::Error(_) => true,
