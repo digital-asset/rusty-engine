@@ -48,6 +48,7 @@ pub fn arity(builtin: Builtin) -> usize {
         AppendText => 2,
         ImplodeText => 1,
         ExplodeText => 1,
+        Sha256Text => 1,
 
         EqualText => 2,
         LeqText => 2,
@@ -150,6 +151,12 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Value<'a> {
                 res = Value::Cons(Rc::new(Value::Text(c.to_string())), Rc::new(res));
             }
             res
+        }
+        Sha256Text => {
+            use sha2::Digest;
+            let arg = args[0].as_string();
+            let hash = sha2::Sha256::digest(arg.as_bytes());
+            Value::Text(hex::encode(hash))
         }
 
         EqualText => Value::Bool(args[0].as_string() == args[1].as_string()),

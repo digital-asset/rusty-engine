@@ -143,6 +143,7 @@ pub enum Builtin {
     AppendText,
     ImplodeText,
     ExplodeText,
+    Sha256Text,
 
     // Text comparison
     EqualText,
@@ -235,6 +236,7 @@ impl Builtin {
             APPEND_TEXT => AppendText,
             IMPLODE_TEXT => ImplodeText,
             EXPLODE_TEXT => ExplodeText,
+            SHA256_TEXT => Sha256Text,
 
             EQUAL_TEXT => EqualText,
             LEQ_TEXT => LeqText,
@@ -286,7 +288,7 @@ impl Builtin {
             ERROR => Error,
 
             // Text stuff
-            TO_TEXT_CODE_POINTS | FROM_TEXT_CODE_POINTS | SHA256_TEXT => Unsupported(proto),
+            TO_TEXT_CODE_POINTS | FROM_TEXT_CODE_POINTS => Unsupported(proto),
 
             // Decimal unsupported
             ADD_DECIMAL | SUB_DECIMAL | MUL_DECIMAL | DIV_DECIMAL | ROUND_DECIMAL
