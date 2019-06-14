@@ -28,10 +28,10 @@ fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
     let module_filter: Option<&String> = args.get(2);
-    let scenario_filter: Option<&String> = args.get(2);
+    let scenario_filter: Option<&String> = args.get(3);
 
     let use_module =
-        |module: &&Module| module_filter.map_or(true, |module_name| module.name == *module_name);
+        |module: &&Module| module_filter.map_or(true, |module_name| module.name == **module_name);
     let use_value = |value: &&DefValue| {
         value.is_test && scenario_filter.map_or(true, |scenario_name| value.name == *scenario_name)
     };
