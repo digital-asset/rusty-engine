@@ -216,10 +216,6 @@ impl<'a> State<'a> {
             Ctrl::Value(v) => match v.borrow() {
                 Value::PAP(prim, args, 0) => match prim {
                     Prim::Builtin(Builtin::TextToText) => Ctrl::Value(Rc::clone(&args[0])),
-                    Prim::Builtin(Builtin::GetParty) => match args[0].as_string().parse() {
-                        Err(msg) => Ctrl::Error(msg),
-                        Ok(p) => Ctrl::from_value(Value::Party(p)),
-                    },
                     Prim::Builtin(Builtin::GetTime) => Ctrl::from_value(Value::Time(self.time)),
                     Prim::Builtin(Builtin::AdvanceTime) => {
                         let delta = args[0].as_i64();
@@ -278,11 +274,10 @@ impl<'a> State<'a> {
                         ));
                         Ctrl::from_value(Value::Bool(true))
                     }
-                    Prim::Builtin(Builtin::Error) => {
-                        let msg = args[0].as_string().to_owned();
-                        Ctrl::Error(msg)
-                    }
-                    Prim::Builtin(opcode) => Ctrl::from_value(interpret(*opcode, args)),
+                    Prim::Builtin(opcode) => Ctrl::catch(|| {
+                        let value = interpret(*opcode, args)?;
+                        Ok(Ctrl::from_value(value))
+                    }),
                     Prim::RecCon(tycon, fields) => {
                         Ctrl::from_value(Value::RecCon(tycon, fields, args.clone()))
                     }

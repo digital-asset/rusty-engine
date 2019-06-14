@@ -7,22 +7,22 @@ use crate::ast::Builtin;
 use crate::value::*;
 
 mod i64_aux {
-    pub fn checked_exp(base: i64, exponent: i64) -> i64 {
+    pub fn checked_exp(base: i64, exponent: i64) -> Option<i64> {
         let mut exponent = exponent;
         if exponent < 0 {
-            panic!("checked_exp: negavtive exponent");
+            return None;
         } else {
             let mut base_opt = Some(base);
             let mut res = 1;
             while exponent > 0 {
-                let base = base_opt.expect("checked_exp: overflow");
+                let base = base_opt?;
                 if exponent & 1 == 1 {
-                    res = i64::checked_mul(res, base).expect("checked_exp: overflow");
+                    res = i64::checked_mul(res, base)?;
                 }
                 base_opt = i64::checked_mul(base, base);
                 exponent >>= 1;
             }
-            res
+            Some(res)
         }
     }
 }
@@ -108,7 +108,19 @@ pub fn arity(builtin: Builtin) -> usize {
     }
 }
 
-pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Value<'a> {
+fn binop_int64<'a, F>(f: F, op: &str, args: &[Rc<Value<'a>>]) -> Result<Value<'a>, String>
+where
+    F: FnOnce(i64, i64) -> Option<i64>,
+{
+    let x = args[0].as_i64();
+    let y = args[1].as_i64();
+    match f(x, y) {
+        None => Err(format!("Arithmetic error: {} {} {}", x, op, y)),
+        Some(n) => Ok(Value::Int64(n)),
+    }
+}
+
+pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Result<Value<'a>, String> {
     use self::Builtin::*;
     assert!(
         args.len() == arity(builtin),
@@ -117,105 +129,110 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Value<'a> {
         args.len()
     );
     match builtin {
-        EqualBool => Value::Bool(args[0].as_bool() == args[1].as_bool()),
+        EqualBool => Ok(Value::Bool(args[0].as_bool() == args[1].as_bool())),
 
-        AddInt64 => Value::Int64(i64::checked_add(args[0].as_i64(), args[1].as_i64()).unwrap()),
-        SubInt64 => Value::Int64(i64::checked_sub(args[0].as_i64(), args[1].as_i64()).unwrap()),
-        MulInt64 => Value::Int64(i64::checked_mul(args[0].as_i64(), args[1].as_i64()).unwrap()),
-        DivInt64 => Value::Int64(i64::checked_div(args[0].as_i64(), args[1].as_i64()).unwrap()),
-        ModInt64 => Value::Int64(i64::checked_rem(args[0].as_i64(), args[1].as_i64()).unwrap()),
-        ExpInt64 => Value::Int64(i64_aux::checked_exp(args[0].as_i64(), args[1].as_i64())),
+        AddInt64 => binop_int64(i64::checked_add, "+", args),
+        SubInt64 => binop_int64(i64::checked_sub, "-", args),
+        MulInt64 => binop_int64(i64::checked_mul, "*", args),
+        DivInt64 => binop_int64(i64::checked_div, "/", args),
+        ModInt64 => binop_int64(i64::checked_rem, "%", args),
+        ExpInt64 => binop_int64(i64_aux::checked_exp, "^", args),
 
-        EqualInt64 => Value::Bool(args[0].as_i64() == args[1].as_i64()),
-        LeqInt64 => Value::Bool(args[0].as_i64() <= args[1].as_i64()),
-        GeqInt64 => Value::Bool(args[0].as_i64() >= args[1].as_i64()),
-        LessInt64 => Value::Bool(args[0].as_i64() < args[1].as_i64()),
-        GreaterInt64 => Value::Bool(args[0].as_i64() > args[1].as_i64()),
+        EqualInt64 => Ok(Value::Bool(args[0].as_i64() == args[1].as_i64())),
+        LeqInt64 => Ok(Value::Bool(args[0].as_i64() <= args[1].as_i64())),
+        GeqInt64 => Ok(Value::Bool(args[0].as_i64() >= args[1].as_i64())),
+        LessInt64 => Ok(Value::Bool(args[0].as_i64() < args[1].as_i64())),
+        GreaterInt64 => Ok(Value::Bool(args[0].as_i64() > args[1].as_i64())),
 
         AppendText => {
             let mut res = args[0].as_string().clone();
             res.push_str(args[1].as_string());
-            Value::Text(res)
+            Ok(Value::Text(res))
         }
         ImplodeText => {
             let mut res = String::new();
             for val in Value::make_list_iter(&args[0]) {
                 res.push_str(val.as_string());
             }
-            Value::Text(res)
+            Ok(Value::Text(res))
         }
         ExplodeText => {
+            // TODO(MH): Use iterators.
             let arg: &Value = args[0].borrow();
             let mut res = Value::Nil;
             for c in arg.as_string().chars().rev() {
                 res = Value::Cons(Rc::new(Value::Text(c.to_string())), Rc::new(res));
             }
-            res
+            Ok(res)
         }
         Sha256Text => {
             use sha2::Digest;
             let arg = args[0].as_string();
             let hash = sha2::Sha256::digest(arg.as_bytes());
-            Value::Text(hex::encode(hash))
+            Ok(Value::Text(hex::encode(hash)))
         }
 
-        EqualText => Value::Bool(args[0].as_string() == args[1].as_string()),
-        LeqText => Value::Bool(args[0].as_string() <= args[1].as_string()),
-        GeqText => Value::Bool(args[0].as_string() >= args[1].as_string()),
-        LessText => Value::Bool(args[0].as_string() < args[1].as_string()),
-        GreaterText => Value::Bool(args[0].as_string() > args[1].as_string()),
+        EqualText => Ok(Value::Bool(args[0].as_string() == args[1].as_string())),
+        LeqText => Ok(Value::Bool(args[0].as_string() <= args[1].as_string())),
+        GeqText => Ok(Value::Bool(args[0].as_string() >= args[1].as_string())),
+        LessText => Ok(Value::Bool(args[0].as_string() < args[1].as_string())),
+        GreaterText => Ok(Value::Bool(args[0].as_string() > args[1].as_string())),
 
-        EqualParty => Value::Bool(args[0].as_party() == args[1].as_party()),
-        LeqParty => Value::Bool(args[0].as_party() <= args[1].as_party()),
-        GeqParty => Value::Bool(args[0].as_party() >= args[1].as_party()),
-        LessParty => Value::Bool(args[0].as_party() < args[1].as_party()),
-        GreaterParty => Value::Bool(args[0].as_party() > args[1].as_party()),
+        EqualParty => Ok(Value::Bool(args[0].as_party() == args[1].as_party())),
+        LeqParty => Ok(Value::Bool(args[0].as_party() <= args[1].as_party())),
+        GeqParty => Ok(Value::Bool(args[0].as_party() >= args[1].as_party())),
+        LessParty => Ok(Value::Bool(args[0].as_party() < args[1].as_party())),
+        GreaterParty => Ok(Value::Bool(args[0].as_party() > args[1].as_party())),
 
-        EqualContractId => Value::Bool(args[0].as_contract_id() == args[1].as_contract_id()),
-        CoerceContractId => Value::ContractId(args[0].as_contract_id().clone()),
+        EqualContractId => Ok(Value::Bool(
+            args[0].as_contract_id() == args[1].as_contract_id(),
+        )),
+        CoerceContractId => Ok(Value::ContractId(args[0].as_contract_id().clone())),
 
-        EqualTime => Value::Bool(args[0].as_time() == args[1].as_time()),
-        LeqTime => Value::Bool(args[0].as_time() <= args[1].as_time()),
-        GeqTime => Value::Bool(args[0].as_time() >= args[1].as_time()),
-        LessTime => Value::Bool(args[0].as_time() < args[1].as_time()),
-        GreaterTime => Value::Bool(args[0].as_time() > args[1].as_time()),
+        EqualTime => Ok(Value::Bool(args[0].as_time() == args[1].as_time())),
+        LeqTime => Ok(Value::Bool(args[0].as_time() <= args[1].as_time())),
+        GeqTime => Ok(Value::Bool(args[0].as_time() >= args[1].as_time())),
+        LessTime => Ok(Value::Bool(args[0].as_time() < args[1].as_time())),
+        GreaterTime => Ok(Value::Bool(args[0].as_time() > args[1].as_time())),
 
-        TimeToMicrosSinceEpoch => Value::Int64(args[0].as_time().to_micros_since_epoch()),
-        TimeFromMicrosSinceEpoch => Value::Time(Time::from_micros_since_epoch(args[0].as_i64())),
+        TimeToMicrosSinceEpoch => Ok(Value::Int64(args[0].as_time().to_micros_since_epoch())),
+        TimeFromMicrosSinceEpoch => {
+            Ok(Value::Time(Time::from_micros_since_epoch(args[0].as_i64())))
+        }
         GetTime => panic!("Builtin::GetTime is handled in step"),
         AdvanceTime => panic!("Builtin::AdvanceTime is handled in step"),
 
-        EqualDate => Value::Bool(args[0].as_date() == args[1].as_date()),
-        LeqDate => Value::Bool(args[0].as_date() <= args[1].as_date()),
-        GeqDate => Value::Bool(args[0].as_date() >= args[1].as_date()),
-        LessDate => Value::Bool(args[0].as_date() < args[1].as_date()),
-        GreaterDate => Value::Bool(args[0].as_date() > args[1].as_date()),
+        EqualDate => Ok(Value::Bool(args[0].as_date() == args[1].as_date())),
+        LeqDate => Ok(Value::Bool(args[0].as_date() <= args[1].as_date())),
+        GeqDate => Ok(Value::Bool(args[0].as_date() >= args[1].as_date())),
+        LessDate => Ok(Value::Bool(args[0].as_date() < args[1].as_date())),
+        GreaterDate => Ok(Value::Bool(args[0].as_date() > args[1].as_date())),
 
-        DateToDaysSinceEpoch => Value::Int64(args[0].as_date().to_days_since_epoch()),
-        DateFromDaysSinceEpoch => Value::Date(Date::from_days_since_epoch(args[0].as_i64())),
+        DateToDaysSinceEpoch => Ok(Value::Int64(args[0].as_date().to_days_since_epoch())),
+        DateFromDaysSinceEpoch => Ok(Value::Date(Date::from_days_since_epoch(args[0].as_i64()))),
 
-        Int64ToText => Value::Text(args[0].as_i64().to_string()),
+        Int64ToText => Ok(Value::Text(args[0].as_i64().to_string())),
         // NOTE(MH): We handle `TextToText` special to avoid cloning.
         TextToText => panic!("Builtin::TextToText is handled in step"),
-        PartyToText => Value::Text(args[0].as_party().to_string()),
-        PartyToQuotedText => Value::Text(format!("'{}'", args[0].as_party())),
-        TimeToText => Value::Text(args[0].as_time().to_string()),
-        DateToText => Value::Text(args[0].as_date().to_string()),
+        PartyToText => Ok(Value::Text(args[0].as_party().to_string())),
+        PartyToQuotedText => Ok(Value::Text(format!("'{}'", args[0].as_party()))),
+        TimeToText => Ok(Value::Text(args[0].as_time().to_string())),
+        DateToText => Ok(Value::Text(args[0].as_date().to_string())),
 
-        Int64FromText => match args[0].as_string().parse() {
+        Int64FromText => Ok(match args[0].as_string().parse() {
             Err(_) => Value::None,
             Ok(n) => Value::Some(Rc::new(Value::Int64(n))),
-        },
-        PartyFromText => match args[0].as_string().parse() {
+        }),
+        PartyFromText => Ok(match args[0].as_string().parse() {
             Err(_) => Value::None,
             Ok(p) => Value::Some(Rc::new(Value::Party(p))),
-        },
-        GetParty => panic!("Builtin::GetParty is handled in step"),
+        }),
+        GetParty => args[0].as_string().parse().map(Value::Party),
 
         Cons => {
             let head = Rc::clone(args[0].borrow());
             let tail = Rc::clone(args[1].borrow());
-            Value::Cons(head, tail)
+            Ok(Value::Cons(head, tail))
         }
         Foldr => panic!("Builtin::Foldr is handled in step"),
         Foldl => panic!("Builtin::Foldl is handled in step"),
@@ -223,9 +240,9 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Value<'a> {
 
         Some => {
             let body = Rc::clone(args[0].borrow());
-            Value::Some(body)
+            Ok(Value::Some(body))
         }
-        Error => panic!("Builtin::Error is handled in step"),
+        Error => Err(args[0].as_string().to_owned()),
 
         Unsupported(x) => panic!("Builtin::Unsupported {:?}", x),
     }
