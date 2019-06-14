@@ -14,32 +14,39 @@ use crate::ast::*;
 use crate::cesk::State;
 use crate::store::Store;
 
-fn make_entry_point(world: &World) -> Expr {
+fn make_entry_point(world: &World, module_name: String, scenario_name: String) -> Expr {
     Expr::Val {
         module_ref: ModuleRef {
             package_id: world.main.clone(),
-            module_name: String::from("Main"),
+            module_name,
         },
-        name: String::from("main"),
+        name: scenario_name,
     }
 }
 
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
+    let module_name = args[2].to_string();
     let world = World::load(filename)?;
-    let mut store = Store::new();
+    let module = world.get_module(&ModuleRef {
+        package_id: world.main.clone(),
+        module_name,
+    });
 
-    let entry_point = make_entry_point(&world);
-    let start = Instant::now();
-    let state = State::init(&entry_point);
-    let result = state.run(&world, &mut store);
-    let duration = start.elapsed();
+    for value in module.values.values() {
+        if value.is_test {
+            println!("Test:   {}", value.name);
+            let start = Instant::now();
+            let mut store = Store::new();
+            let entry_point = make_entry_point(&world, module.name.clone(), value.name.clone());
+            let state = State::init(&entry_point);
+            let result = state.run(&world, &mut store);
+            let duration = start.elapsed();
 
-    println!(
-        "Input:  {}\nTime:   {:?}\nResult: {:?}",
-        filename, duration, result,
-    );
+            println!("Result: {:?}\nTime:   {:?}", result, duration);
+        }
+    }
 
     Ok(())
 }
@@ -55,7 +62,7 @@ mod tests {
     {
         let world = World::load(path).unwrap();
         let mut store = Store::new();
-        let entry_point = make_entry_point(&world);
+        let entry_point = make_entry_point(&world, "Main".to_string(), "main".to_string());
         let state = State::init(&entry_point);
         let result = state.run(&world, &mut store);
         match result {

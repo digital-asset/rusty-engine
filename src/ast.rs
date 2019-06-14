@@ -849,13 +849,19 @@ impl Expr {
 pub struct DefValue {
     pub name: String,
     pub expr: Expr,
+    pub is_test: bool,
 }
 
 impl DefValue {
     fn from_proto(proto: daml_lf_1::DefValue, env: &mut Env) -> Self {
         let name = proto.name_with_type.unwrap().name.join(".");
         let expr = Expr::from_proto(proto.expr, env);
-        DefValue { name, expr }
+        let is_test = proto.is_test;
+        DefValue {
+            name,
+            expr,
+            is_test,
+        }
     }
 }
 
@@ -932,8 +938,8 @@ impl DefTemplate {
 
 #[derive(Debug)]
 pub struct Module {
-    name: String,
-    values: FnvHashMap<String, DefValue>,
+    pub name: String,
+    pub values: FnvHashMap<String, DefValue>,
     templates: FnvHashMap<String, DefTemplate>,
 }
 
