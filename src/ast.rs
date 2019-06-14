@@ -175,12 +175,24 @@ pub enum Builtin {
     GetTime,
     AdvanceTime,
 
+    // Date comparison
+    EqualDate,
+    LeqDate,
+    GeqDate,
+    LessDate,
+    GreaterDate,
+
+    // Date operations
+    DateToDaysSinceEpoch,
+    DateFromDaysSinceEpoch,
+
     // Conversion to text
     Int64ToText,
     TextToText,
     PartyToText,
     PartyToQuotedText,
     TimeToText,
+    DateToText,
 
     // Conversion from text
     Int64FromText,
@@ -248,11 +260,21 @@ impl Builtin {
             TIMESTAMP_TO_UNIX_MICROSECONDS => TimeToMicrosSinceEpoch,
             UNIX_MICROSECONDS_TO_TIMESTAMP => TimeFromMicrosSinceEpoch,
 
+            EQUAL_DATE => EqualDate,
+            LEQ_DATE => LeqDate,
+            LESS_DATE => LessDate,
+            GEQ_DATE => GeqDate,
+            GREATER_DATE => GreaterDate,
+
+            DATE_TO_UNIX_DAYS => DateToDaysSinceEpoch,
+            UNIX_DAYS_TO_DATE => DateFromDaysSinceEpoch,
+
             TO_TEXT_INT64 => Int64ToText,
             TO_TEXT_TEXT => TextToText,
             TO_TEXT_PARTY => PartyToText,
             TO_QUOTED_TEXT_PARTY => PartyToQuotedText,
             TO_TEXT_TIMESTAMP => TimeToText,
+            TO_TEXT_DATE => DateToText,
 
             FROM_TEXT_INT64 => Int64FromText,
             FROM_TEXT_PARTY => PartyFromText,
@@ -272,10 +294,6 @@ impl Builtin {
             | TO_TEXT_DECIMAL | FROM_TEXT_DECIMAL | INT64_TO_DECIMAL | DECIMAL_TO_INT64 => {
                 Unsupported(proto)
             }
-
-            // Date unsupported
-            EQUAL_DATE | LEQ_DATE | LESS_DATE | GEQ_DATE | GREATER_DATE | TO_TEXT_DATE
-            | DATE_TO_UNIX_DAYS | UNIX_DAYS_TO_DATE => Unsupported(proto),
 
             // Map unsupported
             MAP_EMPTY | MAP_INSERT | MAP_LOOKUP | MAP_DELETE | MAP_TO_LIST | MAP_SIZE => {

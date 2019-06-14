@@ -38,6 +38,9 @@ pub struct ContractId(i64);
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Time(i64);
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct Date(i64);
+
 #[derive(Debug)]
 pub enum Value<'a> {
     Unit,
@@ -47,6 +50,7 @@ pub enum Value<'a> {
     Party(Party),
     ContractId(ContractId),
     Time(Time),
+    Date(Date),
     RecCon(&'a TypeConRef, &'a Vec<String>, Vec<Rc<Value<'a>>>),
     VariantCon(&'a TypeConRef, &'a String, Rc<Value<'a>>),
     Nil,
@@ -121,18 +125,34 @@ impl fmt::Display for ContractId {
 impl Time {
     pub const EPOCH: Self = Time(0);
 
-    pub fn to_micros_since_epoch(&self) -> i64 {
-        self.0
-    }
-
     pub fn from_micros_since_epoch(ms: i64) -> Self {
         Self(ms)
+    }
+
+    pub fn to_micros_since_epoch(&self) -> i64 {
+        self.0
     }
 }
 
 impl fmt::Display for Time {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}ms SE", self.0)
+    }
+}
+
+impl Date {
+    pub fn from_days_since_epoch(days: i64) -> Self {
+        Self(days)
+    }
+
+    pub fn to_days_since_epoch(&self) -> i64 {
+        self.0
+    }
+}
+
+impl fmt::Display for Date {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}d SE", self.0)
     }
 }
 
@@ -176,6 +196,13 @@ impl<'a> Value<'a> {
         match self {
             Value::Time(t) => &t,
             _ => panic!("Expected Time, found {:?}", self),
+        }
+    }
+
+    pub fn as_date(&self) -> &Date {
+        match self {
+            Value::Date(d) => &d,
+            _ => panic!("Expected Date, found {:?}", self),
         }
     }
 

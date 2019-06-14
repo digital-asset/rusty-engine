@@ -79,6 +79,11 @@ mod tests {
     }
 
     #[test]
+    fn bond_trading() {
+        dar_test("test/bond-trading.dar", expect_unit);
+    }
+
+    #[test]
     fn queens() {
         dar_test("test/Queens.dar", expect_unit);
     }

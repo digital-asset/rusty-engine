@@ -213,15 +213,11 @@ impl<'a> State<'a> {
                     Prim::Builtin(Builtin::GetTime) => Ctrl::from_value(Value::Time(self.time)),
                     Prim::Builtin(Builtin::AdvanceTime) => {
                         let delta = args[0].as_i64();
-                        if delta < 0 {
-                            Ctrl::Error(format!("cannot move time backwards: {}ms", delta))
-                        } else {
-                            let time = Time::from_micros_since_epoch(
-                                i64::checked_add(self.time.to_micros_since_epoch(), delta).unwrap(),
-                            );
-                            self.time = time;
-                            Ctrl::from_value(Value::Time(time))
-                        }
+                        let time = Time::from_micros_since_epoch(
+                            i64::checked_add(self.time.to_micros_since_epoch(), delta).unwrap(),
+                        );
+                        self.time = time;
+                        Ctrl::from_value(Value::Time(time))
                     }
                     // TODO(MH): There's plenty of room for optimizations in foldr
                     // and foldl, but let's get something simple and correct first.

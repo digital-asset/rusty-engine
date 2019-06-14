@@ -75,11 +75,21 @@ pub fn arity(builtin: Builtin) -> usize {
         GetTime => 0,
         AdvanceTime => 1,
 
+        EqualDate => 2,
+        LeqDate => 2,
+        GeqDate => 2,
+        LessDate => 2,
+        GreaterDate => 2,
+
+        DateToDaysSinceEpoch => 1,
+        DateFromDaysSinceEpoch => 1,
+
         Int64ToText => 1,
         TextToText => 1,
         PartyToText => 1,
         PartyToQuotedText => 1,
         TimeToText => 1,
+        DateToText => 1,
 
         Int64FromText => 1,
         PartyFromText => 1,
@@ -168,12 +178,22 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Value<'a> {
         GetTime => panic!("Builtin::GetTime is handled in step"),
         AdvanceTime => panic!("Builtin::AdvanceTime is handled in step"),
 
+        EqualDate => Value::Bool(args[0].as_date() == args[1].as_date()),
+        LeqDate => Value::Bool(args[0].as_date() <= args[1].as_date()),
+        GeqDate => Value::Bool(args[0].as_date() >= args[1].as_date()),
+        LessDate => Value::Bool(args[0].as_date() < args[1].as_date()),
+        GreaterDate => Value::Bool(args[0].as_date() > args[1].as_date()),
+
+        DateToDaysSinceEpoch => Value::Int64(args[0].as_date().to_days_since_epoch()),
+        DateFromDaysSinceEpoch => Value::Date(Date::from_days_since_epoch(args[0].as_i64())),
+
         Int64ToText => Value::Text(args[0].as_i64().to_string()),
         // NOTE(MH): We handle `TextToText` special to avoid cloning.
         TextToText => panic!("Builtin::TextToText is handled in step"),
         PartyToText => Value::Text(args[0].as_party().to_string()),
         PartyToQuotedText => Value::Text(format!("'{}'", args[0].as_party())),
         TimeToText => Value::Text(args[0].as_time().to_string()),
+        DateToText => Value::Text(args[0].as_date().to_string()),
 
         Int64FromText => match args[0].as_string().parse() {
             Err(_) => Value::None,
