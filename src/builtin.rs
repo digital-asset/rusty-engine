@@ -153,7 +153,7 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Result<Value<'
         }
         ImplodeText => {
             let mut res = String::new();
-            for val in Value::make_list_iter(&args[0]) {
+            for val in args[0].as_list() {
                 res.push_str(val.as_string());
             }
             Ok(Value::Text(res))
@@ -175,7 +175,7 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Result<Value<'
         }
         // FIXME(MH): Both primitives do not operate with unicode code points
         // but with unicode scalar values. This is against the DAML-LF spec.
-        TextToCodePoints => Ok(Value::from_iter(
+        TextToCodePoints => Ok(Value::from_list(
             args[0]
                 .as_string()
                 .chars()
@@ -183,7 +183,8 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Result<Value<'
         )),
         TextFromCodePoints => {
             use std::convert::TryFrom;
-            let t: Result<String, i64> = Value::make_list_iter(&args[0])
+            let t: Result<String, i64> = args[0]
+                .as_list()
                 .map(|v| {
                     let i = v.as_i64();
                     let w = u32::try_from(i).map_err(|_| i)?;

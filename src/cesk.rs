@@ -271,9 +271,9 @@ impl<'a> State<'a> {
             }
             Prim::Builtin(Builtin::EqualList) => {
                 self.kont.push(Kont::EqualList(
-                    Rc::clone(args[0].borrow()),
-                    Value::make_list_iter(args[1].borrow()),
-                    Value::make_list_iter(args[2].borrow()),
+                    Rc::clone(&args[0]),
+                    args[1].as_list(),
+                    args[2].as_list(),
                 ));
                 Ctrl::from_value(Value::Bool(true))
             }
@@ -329,8 +329,9 @@ impl<'a> State<'a> {
                 let payload = self.env.pop();
 
                 let precondtion: bool = args[0].as_bool();
-                let signatories: FnvHashSet<Party> = Value::make_list_iter(&args[1])
-                    .map(|x| x.as_party().clone())
+                let signatories: FnvHashSet<Party> = args[1]
+                    .as_list()
+                    .map(|value| value.as_party().clone())
                     .collect();
                 if !precondtion {
                     Ctrl::Error(format!(
@@ -377,8 +378,9 @@ impl<'a> State<'a> {
                 let template = world.get_template(template_ref);
                 let choice = template.choices.get::<String>(choice_name).unwrap();
 
-                let controllers: FnvHashSet<Party> = Value::make_list_iter(&args[0])
-                    .map(|x| x.as_party().clone())
+                let controllers: FnvHashSet<Party> = args[0]
+                    .as_list()
+                    .map(|value| value.as_party().clone())
                     .collect();
                 let contract_id = &args[1];
                 let arg = self.env.pop();

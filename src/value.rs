@@ -1,6 +1,5 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-use std::borrow::Borrow;
 use std::fmt;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -62,9 +61,7 @@ pub enum Value<'a> {
 }
 
 #[derive(Debug)]
-pub struct ValueListIter<'a> {
-    value: Rc<Value<'a>>,
-}
+pub struct ValueListIter<'a>(Option<(Rc<Value<'a>>, Rc<Value<'a>>)>);
 
 impl<'a> Env<'a> {
     pub fn new() -> Self {
@@ -163,7 +160,7 @@ impl fmt::Display for Date {
 }
 
 impl<'a> Value<'a> {
-    pub fn from_iter<I>(iter: I) -> Self
+    pub fn from_list<I>(iter: I) -> Self
     where
         I: Iterator<Item = Rc<Value<'a>>> + DoubleEndedIterator,
     {
@@ -220,26 +217,23 @@ impl<'a> Value<'a> {
         }
     }
 
-    pub fn make_list_iter(this: &Rc<Self>) -> ValueListIter<'a> {
-        ValueListIter {
-            value: Rc::clone(this),
-        }
+    pub fn as_list(&self) -> ValueListIter<'a> {
+        ValueListIter(match self {
+            Value::Nil => None,
+            Value::Cons(head, tail) => Some((Rc::clone(head), Rc::clone(tail))),
+            _ => panic!("Expected List, found {:?}", self),
+        })
     }
 }
 
 impl<'a> Iterator for ValueListIter<'a> {
     type Item = Rc<Value<'a>>;
 
-    fn next(&mut self) -> Option<Rc<Value<'a>>> {
-        match self.value.borrow() {
-            Value::Nil => None,
-            Value::Cons(head, tail) => {
-                let head = Rc::clone(&head);
-                let tail = Rc::clone(&tail);
-                self.value = tail;
-                Some(head)
-            }
-            v => panic!("Expexted list, found {:?}", v),
-        }
+    fn next(&mut self) -> Option<Self::Item> {
+        let this = std::mem::replace(&mut self.0, None);
+        this.map(|(head, tail)| {
+            *self = tail.as_list();
+            head
+        })
     }
 }
