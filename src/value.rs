@@ -1,5 +1,6 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+use fnv::FnvHashSet;
 use std::fmt;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -21,6 +22,7 @@ pub enum Prim<'a> {
     VariantCon(&'a TypeConRef, &'a String),
     Lam(&'a Expr, Env<'a>),
     CreateCall(&'a TypeConRef),
+    CreateCheckPrecondition(&'a TypeConRef),
     CreateExec(&'a TypeConRef),
     Fetch(&'a TypeConRef),
     ExerciseCall(&'a TypeConRef, &'a String),
@@ -72,6 +74,10 @@ impl<'a> Env<'a> {
         self.stack
             .get(self.stack.len() - idx)
             .expect("Bad de Bruijn index")
+    }
+
+    pub fn top(&self) -> &Rc<Value<'a>> {
+        self.stack.last().expect("Top on empty stack")
     }
 
     pub fn push(&mut self, value: Rc<Value<'a>>) {
@@ -223,6 +229,12 @@ impl<'a> Value<'a> {
             Value::Cons(head, tail) => Some((Rc::clone(head), Rc::clone(tail))),
             _ => panic!("Expected List, found {:?}", self),
         })
+    }
+
+    pub fn as_party_set(&self) -> FnvHashSet<Party> {
+        self.as_list()
+            .map(|value| value.as_party().clone())
+            .collect()
     }
 }
 

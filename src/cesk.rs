@@ -312,30 +312,36 @@ impl<'a> State<'a> {
                 new_env.push(payload);
                 let old_env = std::mem::replace(&mut self.env, new_env);
                 self.kont.push(Kont::Dump(old_env));
-                self.kont.push(Kont::Arg(&template.signatories));
                 self.kont.push(Kont::Arg(&template.precondtion));
-                Ctrl::from_prim(Prim::CreateExec(template_ref), 2)
+                Ctrl::from_prim(Prim::CreateCheckPrecondition(template_ref), 1)
             }
-            Prim::CreateExec(template_ref) => {
-                let payload = self.env.pop();
-
+            Prim::CreateCheckPrecondition(template_ref) => {
+                let template = world.get_template(template_ref);
+                let payload = self.env.top();
                 let precondtion: bool = args[0].as_bool();
-                let signatories: FnvHashSet<Party> = args[1]
-                    .as_list()
-                    .map(|value| value.as_party().clone())
-                    .collect();
                 if !precondtion {
                     Ctrl::Error(format!(
                         "Template pre-condition violated for {}: {:?}",
                         template_ref, payload
                     ))
-                } else if !signatories.is_subset(&self.auth) {
+                } else {
+                    self.kont.push(Kont::Arg(&template.observers));
+                    self.kont.push(Kont::Arg(&template.signatories));
+                    Ctrl::from_prim(Prim::CreateExec(template_ref), 2)
+                }
+            }
+            Prim::CreateExec(template_ref) => {
+                let payload = self.env.pop();
+
+                let signatories = args[0].as_party_set();
+                let observers = args[1].as_party_set();
+                if !signatories.is_subset(&self.auth) {
                     Ctrl::Error(format!(
                         "authorization missing for {}: {:?}",
                         template_ref, payload
                     ))
                 } else {
-                    let contract_id = store.create(template_ref, payload, signatories);
+                    let contract_id = store.create(template_ref, payload, signatories, observers);
                     Ctrl::from_value(Value::ContractId(contract_id))
                 }
             }
@@ -369,10 +375,7 @@ impl<'a> State<'a> {
                 let template = world.get_template(template_ref);
                 let choice = template.choices.get::<String>(choice_name).unwrap();
 
-                let controllers: FnvHashSet<Party> = args[0]
-                    .as_list()
-                    .map(|value| value.as_party().clone())
-                    .collect();
+                let controllers = args[0].as_party_set();
                 let contract_id = &args[1];
                 let arg = self.env.pop();
 

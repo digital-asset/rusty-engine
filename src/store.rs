@@ -12,6 +12,7 @@ pub struct Contract<'a> {
     pub template_ref: &'a TypeConRef,
     pub payload: Rc<Value<'a>>,
     pub signatories: FnvHashSet<Party>,
+    pub observers: FnvHashSet<Party>,
 }
 
 #[derive(Debug)]
@@ -62,12 +63,14 @@ impl<'a> Store<'a> {
         template_ref: &'a TypeConRef,
         payload: Rc<Value<'a>>,
         signatories: FnvHashSet<Party>,
+        observers: FnvHashSet<Party>,
     ) -> ContractId {
         let contract_id = ContractId::new(self.next_pending_contract_id);
         let contract = Contract {
             template_ref,
             payload,
             signatories,
+            observers,
         };
         self.pending
             .insert(contract_id.clone(), Entry::Active(contract));
