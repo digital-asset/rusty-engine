@@ -8,7 +8,8 @@ use crate::protos::da::daml_lf;
 use crate::protos::da::daml_lf_1;
 
 mod debruijn {
-    use super::{Binder, PackageId};
+    use super::PackageId;
+    use std::borrow::Borrow;
     use std::collections::HashMap;
 
     pub struct Env {
@@ -30,7 +31,6 @@ mod debruijn {
             self.depth - self.rev_indices.get(var).and_then(|v| v.last()).unwrap()
         }
 
-        // TODO(MH): Don't clone `var`.
         pub fn push(&mut self, var: &str) {
             self.rev_indices
                 .entry(var.to_owned())
@@ -39,10 +39,13 @@ mod debruijn {
             self.depth += 1;
         }
 
-        // TODO(MH): Use iterators.
-        pub fn push_many(&mut self, vars: &[&Binder]) {
+        pub fn push_many<'a, T, I>(&mut self, vars: I)
+        where
+            T: Borrow<String> + 'a,
+            I: IntoIterator<Item = &'a T>,
+        {
             for var in vars {
-                self.push(var);
+                self.push(var.borrow());
             }
         }
 
@@ -51,9 +54,13 @@ mod debruijn {
             self.depth -= 1;
         }
 
-        pub fn pop_many(&mut self, vars: &[&Binder]) {
+        pub fn pop_many<'a, T, I>(&mut self, vars: I)
+        where
+            T: Borrow<String> + 'a,
+            I: IntoIterator<Item = &'a T>,
+        {
             for var in vars {
-                self.pop(var);
+                self.pop(var.borrow());
             }
         }
     }
@@ -562,11 +569,9 @@ impl Expr {
             abs(x) => {
                 let params: Vec<Binder> = x.param.into_iter().map(|x| x.var).collect();
                 let body = {
-                    // TODO(MH): Remove this abomination.
-                    let binders: Vec<&Binder> = params.iter().collect();
-                    env.push_many(&binders);
+                    env.push_many(&params);
                     let body = Self::boxed_from_proto(x.body, env);
-                    env.pop_many(&binders);
+                    env.pop_many(&params);
                     body
                 };
                 Expr::Lam { params, body }
@@ -901,7 +906,7 @@ impl Choice {
         env.push(&arg_binder);
         let controllers = Expr::from_proto(proto.controllers, env);
         env.pop(&arg_binder);
-        env.push_many(&[&self_binder, &arg_binder]);
+        env.push_many(vec![&self_binder, &arg_binder]);
         let consequence = Expr::from_proto(proto.update, env);
         env.pop_many(&[&self_binder, &arg_binder]);
         Choice {

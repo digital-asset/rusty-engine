@@ -106,11 +106,7 @@ impl<'a> State<'a> {
                 fields,
                 exprs,
             } => {
-                // TODO(MH): Find a less imperative way to do this.
-                self.kont.reserve(exprs.len());
-                for expr in exprs.iter().rev() {
-                    self.kont.push(Kont::Arg(expr));
-                }
+                self.kont.extend(exprs.iter().rev().map(Kont::Arg));
                 Ctrl::from_prim(Prim::RecCon(tycon, fields), exprs.len())
             }
 
@@ -140,11 +136,7 @@ impl<'a> State<'a> {
             }
 
             Expr::App { fun, args } => {
-                // TODO(MH): Find a less imperative way to do this.
-                self.kont.reserve(args.len());
-                for arg in args.iter().rev() {
-                    self.kont.push(Kont::Arg(arg));
-                }
+                self.kont.extend(args.iter().rev().map(Kont::Arg));
                 Ctrl::Expr(fun)
             }
 
@@ -508,24 +500,20 @@ impl<'a> State<'a> {
                 }
             }
             Kont::Match(alts) => match value.borrow() {
-                Value::Bool(b) => Ctrl::Expr(&alts[if *b { 1 } else { 0 }].body),
+                Value::Bool(b) => Ctrl::Expr(&alts[*b as usize].body),
                 Value::VariantCon(_tycon, con1, arg) => {
-                    let alt_opt = alts.iter().find(|alt| match &alt.pattern {
-                        Pat::Variant(con2, _var) if *con1 == con2 => {
-                            // TODO(MH): Doing side effecting stuff in the predicate is
-                            // pretty bad style. Improve this when `Iterable::find_map` lands.
-                            self.kont.push(Kont::Pop(1));
-                            self.env.push(Rc::clone(arg.borrow()));
-                            true
-                        }
-                        Pat::Default => true,
-                        _ => false,
+                    let alt_opt = alts.iter().find_map(|alt| match &alt.pattern {
+                        Pat::Variant(con2, _var) if *con1 == con2 => Some((alt, true)),
+                        Pat::Default => Some((alt, false)),
+                        _ => None,
                     });
-                    if let Some(alt) = alt_opt {
-                        Ctrl::Expr(&alt.body)
-                    } else {
-                        panic!("No match for {:?} in {:?}", value, alts)
+                    let (alt, bind_arg) =
+                        alt_opt.unwrap_or_else(|| panic!("No match for {:?} in {:?}", value, alts));
+                    if bind_arg {
+                        self.kont.push(Kont::Pop(1));
+                        self.env.push(Rc::clone(arg.borrow()));
                     }
+                    Ctrl::Expr(&alt.body)
                 }
                 Value::Nil => Ctrl::Expr(&alts[0].body),
                 Value::Cons(head, tail) => {

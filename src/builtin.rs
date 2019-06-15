@@ -158,15 +158,12 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Result<Value<'
             }
             Ok(Value::Text(res))
         }
-        ExplodeText => {
-            // TODO(MH): Use iterators.
-            let arg: &Value = args[0].borrow();
-            let mut res = Value::Nil;
-            for c in arg.as_string().chars().rev() {
-                res = Value::Cons(Rc::new(Value::Text(c.to_string())), Rc::new(res));
-            }
-            Ok(res)
-        }
+        ExplodeText => Ok(Value::from_list(
+            args[0]
+                .as_string()
+                .chars()
+                .map(|c| Rc::new(Value::Text(c.to_string()))),
+        )),
         Sha256Text => {
             use sha2::Digest;
             let arg = args[0].as_string();
