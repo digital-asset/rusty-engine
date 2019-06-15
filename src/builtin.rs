@@ -1,6 +1,5 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-use std::borrow::Borrow;
 use std::rc::Rc;
 
 use crate::ast::Builtin;
@@ -251,8 +250,8 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Result<Value<'
         GetParty => args[0].as_string().parse().map(Value::Party),
 
         Cons => {
-            let head = Rc::clone(args[0].borrow());
-            let tail = Rc::clone(args[1].borrow());
+            let head = Rc::clone(&args[0]);
+            let tail = Rc::clone(&args[1]);
             Ok(Value::Cons(head, tail))
         }
         Foldr => panic!("Builtin::Foldr is handled in step"),
@@ -260,7 +259,7 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Result<Value<'
         EqualList => panic!("Builtin::EqualLit is handled in step"),
 
         Some => {
-            let body = Rc::clone(args[0].borrow());
+            let body = Rc::clone(&args[0]);
             Ok(Value::Some(body))
         }
         Error => Err(args[0].as_string().to_owned()),

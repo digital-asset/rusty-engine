@@ -1,7 +1,6 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 use fnv::FnvHashSet;
-use std::borrow::Borrow;
 use std::rc::Rc;
 
 use crate::ast::*;
@@ -115,7 +114,7 @@ impl<'a> State<'a> {
                 field,
                 record,
             } => {
-                self.kont.push(Kont::Arg(record.borrow()));
+                self.kont.push(Kont::Arg(&record));
                 Ctrl::from_prim(Prim::RecProj(tycon, field), 1)
             }
 
@@ -131,7 +130,7 @@ impl<'a> State<'a> {
             }
 
             Expr::VariantCon { tycon, con, arg } => {
-                self.kont.push(Kont::Arg(arg.borrow()));
+                self.kont.push(Kont::Arg(&arg));
                 Ctrl::from_prim(Prim::VariantCon(tycon, con), 1)
             }
 
@@ -223,9 +222,9 @@ impl<'a> State<'a> {
             // TODO(MH): There's plenty of room for optimizations in foldr
             // and foldl, but let's get something simple and correct first.
             Prim::Builtin(Builtin::Foldr) => {
-                let f = args[0].borrow();
-                let z = args[1].borrow();
-                match args[2].borrow() {
+                let f = &args[0];
+                let z = &args[1];
+                match &*args[2] {
                     // foldr f z [] = z
                     Value::Nil => Ctrl::Value(Rc::clone(z)),
                     // foldr f z (x::xs) = f x (foldr f z xs)
@@ -243,9 +242,9 @@ impl<'a> State<'a> {
                 }
             }
             Prim::Builtin(Builtin::Foldl) => {
-                let f = args[0].borrow();
-                let z = args[1].borrow();
-                match args[2].borrow() {
+                let f = &args[0];
+                let z = &args[1];
+                match &*args[2] {
                     // foldl f z [] = z
                     Value::Nil => Ctrl::Value(Rc::clone(z)),
                     // foldl f z (x::xs) = foldl f (f z x) xs
@@ -277,15 +276,15 @@ impl<'a> State<'a> {
                 Ctrl::from_value(Value::RecCon(tycon, fields, args.to_vec()))
             }
             Prim::RecProj(_tycon, field) => {
-                if let Value::RecCon(_tycon, fields, vals) = args[0].borrow() {
+                if let Value::RecCon(_tycon, fields, vals) = &*args[0] {
                     let idx = fields.iter().position(|x| x == *field).unwrap();
-                    Ctrl::Value(Rc::clone(vals[idx].borrow()))
+                    Ctrl::Value(Rc::clone(&vals[idx]))
                 } else {
                     panic!("RecProj not on RecCon")
                 }
             }
             Prim::RecUpd(_tycon, field) => {
-                if let Value::RecCon(tycon, fields, vals) = args[0].borrow() {
+                if let Value::RecCon(tycon, fields, vals) = &*args[0] {
                     let idx = fields.iter().position(|x| x == *field).unwrap();
                     let mut vals = vals.clone();
                     vals[idx] = Rc::clone(&args[1]);
@@ -295,7 +294,7 @@ impl<'a> State<'a> {
                 }
             }
             Prim::VariantCon(tycon, con) => {
-                Ctrl::from_value(Value::VariantCon(tycon, con, Rc::clone(args[0].borrow())))
+                Ctrl::from_value(Value::VariantCon(tycon, con, Rc::clone(&args[0])))
             }
             Prim::Lam(body, env) => {
                 let mut new_env = env.clone();
@@ -456,7 +455,7 @@ impl<'a> State<'a> {
                 Ctrl::Value(Rc::clone(&value))
             }
             Kont::Arg(arg) => {
-                if let Value::PAP(prim, args, missing) = value.borrow() {
+                if let Value::PAP(prim, args, missing) = &*value {
                     self.kont
                         .push(Kont::Fun(prim.clone(), args.clone(), *missing));
                     Ctrl::Expr(arg)
@@ -467,7 +466,7 @@ impl<'a> State<'a> {
             // TODO(MH): This seems inefficient. We should apply all args
             // in one go.
             Kont::ArgVal(arg) => {
-                if let Value::PAP(prim, args, missing) = value.borrow() {
+                if let Value::PAP(prim, args, missing) = &*value {
                     self.kont
                         .push(Kont::Fun(prim.clone(), args.clone(), *missing));
                     Ctrl::Value(arg)
@@ -499,7 +498,7 @@ impl<'a> State<'a> {
                     Ctrl::Value(Rc::new(Value::PAP(prim2, args2, missing2 - 1)))
                 }
             }
-            Kont::Match(alts) => match value.borrow() {
+            Kont::Match(alts) => match &*value {
                 Value::Bool(b) => Ctrl::Expr(&alts[*b as usize].body),
                 Value::VariantCon(_tycon, con1, arg) => {
                     let alt_opt = alts.iter().find_map(|alt| match &alt.pattern {
@@ -511,7 +510,7 @@ impl<'a> State<'a> {
                         alt_opt.unwrap_or_else(|| panic!("No match for {:?} in {:?}", value, alts));
                     if bind_arg {
                         self.kont.push(Kont::Pop(1));
-                        self.env.push(Rc::clone(arg.borrow()));
+                        self.env.push(Rc::clone(&arg));
                     }
                     Ctrl::Expr(&alt.body)
                 }
@@ -520,8 +519,8 @@ impl<'a> State<'a> {
                     let alt = &alts[1];
                     if let Pat::Cons(..) = alt.pattern {
                         self.kont.push(Kont::Pop(2));
-                        self.env.push(Rc::clone(head.borrow()));
-                        self.env.push(Rc::clone(tail.borrow()));
+                        self.env.push(Rc::clone(&head));
+                        self.env.push(Rc::clone(&tail));
                     };
                     Ctrl::Expr(&alt.body)
                 }
@@ -530,7 +529,7 @@ impl<'a> State<'a> {
                     let alt = &alts[1];
                     if let Pat::Some(_) = alt.pattern {
                         self.kont.push(Kont::Pop(1));
-                        self.env.push(Rc::clone(body.borrow()));
+                        self.env.push(Rc::clone(&body));
                     };
                     Ctrl::Expr(&alt.body)
                 }
@@ -583,8 +582,8 @@ impl<'a> State<'a> {
     }
 
     pub fn is_final(&self) -> bool {
-        match self.ctrl.borrow() {
-            Ctrl::Value(v) => match v.borrow() {
+        match &self.ctrl {
+            Ctrl::Value(v) => match **v {
                 Value::PAP(_, _, 0) => false,
                 _ => self.kont.is_empty(),
             },
