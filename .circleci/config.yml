@@ -23,7 +23,7 @@ jobs:
           command: cargo fmt --all -- --check
       - run:
           name: Lint
-          command: cargo clippy --all --all-targets
+          command: cargo clippy --all --all-targets -- --deny warnings
       - run:
           name: Test
           command: cargo test --all --all-targets

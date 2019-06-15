@@ -321,7 +321,7 @@ pub enum PrimLit {
 }
 
 impl PrimLit {
-    fn from_proto(proto: Box<daml_lf_1::PrimLit>) -> PrimLit {
+    fn from_proto(proto: daml_lf_1::PrimLit) -> PrimLit {
         use daml_lf_1::prim_lit::Sum::*;
         match proto.Sum.unwrap() {
             int64(x) => PrimLit::Int64(x),
@@ -502,7 +502,7 @@ impl Expr {
                 CON_FALSE => PrimLit::Bool(false),
                 CON_TRUE => PrimLit::Bool(true),
             }),
-            prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(x)),
+            prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(*x)),
             rec_con(x) => {
                 let tycon = TypeConRef::from_proto(x.tycon.unwrap().tycon, env);
                 let mut fields = Vec::new();
@@ -636,7 +636,7 @@ impl Expr {
                     Expr::App { fun, args }
                 };
 
-                let body = Self::from_update_proto(update_proto, apply_token, env);
+                let body = Self::from_update_proto(*update_proto, apply_token, env);
 
                 env.pop(&param);
                 Expr::Lam {
@@ -657,7 +657,7 @@ impl Expr {
                     Expr::App { fun, args }
                 };
 
-                let body = Self::from_scenario_proto(scenario_proto, apply_token, env);
+                let body = Self::from_scenario_proto(*scenario_proto, apply_token, env);
 
                 env.pop(&param);
                 Expr::Lam {
@@ -669,7 +669,7 @@ impl Expr {
         }
     }
 
-    fn from_update_proto<F>(proto: Box<daml_lf_1::Update>, apply_token: F, env: &mut Env) -> Expr
+    fn from_update_proto<F>(proto: daml_lf_1::Update, apply_token: F, env: &mut Env) -> Expr
     where
         F: Fn(Expr) -> Expr,
     {
@@ -736,11 +736,7 @@ impl Expr {
         }
     }
 
-    fn from_scenario_proto<F>(
-        proto: Box<daml_lf_1::Scenario>,
-        apply_token: F,
-        env: &mut Env,
-    ) -> Expr
+    fn from_scenario_proto<F>(proto: daml_lf_1::Scenario, apply_token: F, env: &mut Env) -> Expr
     where
         F: Fn(Expr) -> Expr,
     {

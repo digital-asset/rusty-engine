@@ -70,6 +70,7 @@ impl<'a> State<'a> {
         }
     }
 
+    #[allow(clippy::cognitive_complexity)]
     pub fn step(&mut self, world: &'a World, store: &mut Store<'a>) {
         let old_ctrl = std::mem::replace(&mut self.ctrl, Ctrl::Evaluating);
 

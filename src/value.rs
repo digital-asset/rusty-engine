@@ -135,7 +135,7 @@ impl Time {
         Self(ms)
     }
 
-    pub fn to_micros_since_epoch(&self) -> i64 {
+    pub fn to_micros_since_epoch(self) -> i64 {
         self.0
     }
 }
@@ -151,7 +151,7 @@ impl Date {
         Self(days)
     }
 
-    pub fn to_days_since_epoch(&self) -> i64 {
+    pub fn to_days_since_epoch(self) -> i64 {
         self.0
     }
 }

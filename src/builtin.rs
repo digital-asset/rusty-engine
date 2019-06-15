@@ -10,7 +10,7 @@ mod i64_aux {
     pub fn checked_exp(base: i64, exponent: i64) -> Option<i64> {
         let mut exponent = exponent;
         if exponent < 0 {
-            return None;
+            None
         } else {
             let mut base_opt = Some(base);
             let mut res = 1;

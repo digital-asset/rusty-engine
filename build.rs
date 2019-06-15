@@ -4,6 +4,15 @@ extern crate protobuf_codegen_pure;
 
 use std::process::Command;
 
+fn sed_in_place(file: &str, command: &str) {
+    let mut cmd = Command::new("sed");
+    cmd.arg("-i");
+    if std::env::consts::OS == "macos" {
+        cmd.arg("");
+    }
+    cmd.arg(command).arg(file).output().expect("sed -i");
+}
+
 fn main() {
     let out_dir = "src/protos/da";
     let inputs = &[
@@ -29,10 +38,15 @@ fn main() {
 
     // NOTE(MH): Patch the generated Rust file to remedy an bug in the codegen
     // until we have a fix.
-    Command::new("sed")
-        .arg("-i")
-        .arg("s/def_template::def_key::/def_key::/")
-        .arg("src/protos/da/daml_lf_1.rs")
-        .output()
-        .expect("sed");
+    sed_in_place(
+        "src/protos/da/daml_lf_1.rs",
+        "s/def_template::def_key::/def_key::/",
+    );
+
+    // NOTE(MH): The protobuf codegen produces `#[allow(clippy)]` pragmas,
+    // which cause a clippy warning. Thus we need to patch it.
+    for input in inputs {
+        let output = "src/".to_string() + &input.replace(".proto", ".rs");
+        sed_in_place(&output, "s/allow(clippy)/allow(clippy::all)/");
+    }
 }
