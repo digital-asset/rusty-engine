@@ -12,6 +12,7 @@ use crate::value::*;
 enum Ctrl<'a> {
     Evaluating,
     Expr(&'a Expr),
+    PAP(Prim<'a>, Vec<Rc<Value<'a>>>, usize),
     Value(Rc<Value<'a>>),
     Error(String),
 }
@@ -43,8 +44,20 @@ impl<'a> Ctrl<'a> {
         Ctrl::Value(Rc::new(v))
     }
 
+    fn into_value(self) -> Rc<Value<'a>> {
+        match self {
+            Ctrl::Value(value) => value,
+            Ctrl::PAP(prim, args, missing) => match prim {
+                Prim::Builtin(_) | Prim::Lam(_, _) => Rc::new(Value::PAP(prim, args, missing)),
+                _ => panic!("Putting bad prim in heap: {:?}", prim),
+            },
+            _ => panic!("expected value, found {:?}", self),
+        }
+    }
+
     fn from_prim(prim: Prim<'a>, arity: usize) -> Self {
-        Ctrl::Value(Rc::new(Value::PAP(prim, Vec::new(), arity)))
+        // Ctrl::Value(Rc::new(Value::PAP(prim, Vec::new(), arity)))
+        Ctrl::PAP(prim, Vec::new(), arity)
     }
 
     fn catch<F>(f: F) -> Self
@@ -230,6 +243,9 @@ impl<'a> State<'a> {
                     // foldr f z (x::xs) = f x (foldr f z xs)
                     Value::Cons(x, xs) => {
                         let args2 = vec![Rc::clone(f), Rc::clone(z), Rc::clone(xs)];
+                        // NOTE(MH): Putting a fully applied `Prim` into
+                        // `ArgVal` is a bit sketchy since it prevents us from
+                        // assuming that `ArgVal` is a proper value.
                         self.kont.push(Kont::ArgVal(Rc::new(Value::PAP(
                             Prim::Builtin(Builtin::Foldr),
                             args2,
@@ -411,14 +427,17 @@ impl<'a> State<'a> {
                 let mut auth = FnvHashSet::default();
                 auth.insert(submitter);
                 let update = Rc::clone(&args[1]);
-                let state = State {
+                let mut state = State {
                     ctrl: Ctrl::Value(update),
                     env: Env::new(),
                     kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
                     auth,
                     time: self.time,
                 };
-                let result = state.run(world, store);
+                while !state.is_final() {
+                    state.step(&world, store);
+                }
+                let result = state.get_result();
                 match result {
                     Ok(value) => {
                         if *should_succeed {
@@ -442,39 +461,60 @@ impl<'a> State<'a> {
     }
 
     /// Step when the control contains a (proper) value.
-    fn step_value(&mut self, value: Rc<Value<'a>>) -> Ctrl<'a> {
+    fn step_value(&mut self, ctrl: Ctrl<'a>) -> Ctrl<'a> {
         let kont = self.kont.pop().expect("Step on final state");
         match kont {
             Kont::Dump(env) => {
                 self.env = env;
-                Ctrl::Value(Rc::clone(&value))
+                ctrl
             }
             Kont::DumpAuth(auth) => {
                 self.auth = auth;
-                Ctrl::Value(Rc::clone(&value))
+                ctrl
             }
             Kont::Pop(count) => {
                 self.env.pop_many(count);
-                Ctrl::Value(Rc::clone(&value))
+                ctrl
             }
-            Kont::Arg(arg) => {
-                if let Value::PAP(prim, args, missing) = &*value {
-                    self.kont
-                        .push(Kont::Fun(prim.clone(), args.clone(), *missing));
-                    Ctrl::Expr(arg)
-                } else {
-                    panic!("Applying value: {:?}", value)
+            Kont::Arg(arg) => match ctrl {
+                Ctrl::Value(value) => {
+                    if let Value::PAP(prim, args, missing) = &*value {
+                        self.kont
+                            .push(Kont::Fun(prim.clone(), args.clone(), *missing));
+                        Ctrl::Expr(arg)
+                    } else {
+                        panic!("Applying value: {:?}", value)
+                    }
                 }
-            }
+                Ctrl::PAP(prim, args, missing) => {
+                    self.kont.push(Kont::Fun(prim, args, missing));
+                    Ctrl::Expr(arg)
+                }
+                _ => panic!("Non-value in step_valie: {:?}", ctrl),
+            },
             // TODO(MH): This seems inefficient. We should apply all args
             // in one go.
+            // TODO(MH): Reduce duplication with the above.
             Kont::ArgVal(arg) => {
-                if let Value::PAP(prim, args, missing) = &*value {
-                    self.kont
-                        .push(Kont::Fun(prim.clone(), args.clone(), *missing));
-                    Ctrl::Value(arg)
-                } else {
-                    panic!("Applying value")
+                match ctrl {
+                    Ctrl::Value(value) => {
+                        if let Value::PAP(prim, args, missing) = &*value {
+                            self.kont
+                                .push(Kont::Fun(prim.clone(), args.clone(), *missing));
+                            Ctrl::Value(arg)
+                        } else {
+                            panic!("Applying value: {:?}", value)
+                        }
+                    }
+                    Ctrl::PAP(prim, args, missing) => {
+                        // TODO(MH): We cannot push `arg` onto `args` and put
+                        // the `PAP` back since `Foldr` puts fully applied
+                        // `Prims`s into `ArgVal`.
+                        assert!(missing > 0);
+                        self.kont.push(Kont::Fun(prim, args, missing));
+                        Ctrl::Value(arg)
+                    }
+                    _ => panic!("Non-value in step_value: {:?}", ctrl),
                 }
             }
             Kont::Fun(prim2, mut args2, missing2) => {
@@ -483,7 +523,7 @@ impl<'a> State<'a> {
                 // and we're still missing arguments. The unoptimized version would be:
                 // args2.push(Rc::clone(&value));
                 // Ctrl::Value(Rc::new(Value::PAP(prim2, args2, missing2 - 1)))
-                args2.push(Rc::clone(&value));
+                args2.push(ctrl.into_value());
                 if missing2 > 1 {
                     let kont_opt = self.kont.pop();
                     match kont_opt {
@@ -493,59 +533,62 @@ impl<'a> State<'a> {
                         }
                         Some(kont) => {
                             self.kont.push(kont);
-                            Ctrl::Value(Rc::new(Value::PAP(prim2, args2, missing2 - 1)))
+                            Ctrl::PAP(prim2, args2, missing2 - 1)
                         }
-                        None => Ctrl::Value(Rc::new(Value::PAP(prim2, args2, missing2 - 1))),
+                        None => Ctrl::PAP(prim2, args2, missing2 - 1),
                     }
                 } else {
-                    Ctrl::Value(Rc::new(Value::PAP(prim2, args2, missing2 - 1)))
+                    Ctrl::PAP(prim2, args2, missing2 - 1)
                 }
             }
-            Kont::Match(alts) => match &*value {
-                Value::Bool(b) => Ctrl::Expr(&alts[*b as usize].body),
-                Value::VariantCon(_tycon, con1, arg) => {
-                    let alt_opt = alts.iter().find_map(|alt| match &alt.pattern {
-                        Pat::Variant(con2, _var) if *con1 == con2 => Some((alt, true)),
-                        Pat::Default => Some((alt, false)),
-                        _ => None,
-                    });
-                    let (alt, bind_arg) =
-                        alt_opt.unwrap_or_else(|| panic!("No match for {:?} in {:?}", value, alts));
-                    if bind_arg {
-                        self.kont.push(Kont::Pop(1));
-                        self.env.push(Rc::clone(&arg));
+            Kont::Match(alts) => {
+                let value = ctrl.into_value();
+                match &*value {
+                    Value::Bool(b) => Ctrl::Expr(&alts[*b as usize].body),
+                    Value::VariantCon(_tycon, con1, arg) => {
+                        let alt_opt = alts.iter().find_map(|alt| match &alt.pattern {
+                            Pat::Variant(con2, _var) if *con1 == con2 => Some((alt, true)),
+                            Pat::Default => Some((alt, false)),
+                            _ => None,
+                        });
+                        let (alt, bind_arg) = alt_opt
+                            .unwrap_or_else(|| panic!("No match for {:?} in {:?}", value, alts));
+                        if bind_arg {
+                            self.kont.push(Kont::Pop(1));
+                            self.env.push(Rc::clone(&arg));
+                        }
+                        Ctrl::Expr(&alt.body)
                     }
-                    Ctrl::Expr(&alt.body)
-                }
-                Value::Nil => Ctrl::Expr(&alts[0].body),
-                Value::Cons(head, tail) => {
-                    let alt = &alts[1];
-                    if let Pat::Cons(..) = alt.pattern {
-                        self.kont.push(Kont::Pop(2));
-                        self.env.push(Rc::clone(&head));
-                        self.env.push(Rc::clone(&tail));
-                    };
-                    Ctrl::Expr(&alt.body)
-                }
-                Value::None => Ctrl::Expr(&alts[0].body),
-                Value::Some(body) => {
-                    let alt = &alts[1];
-                    if let Pat::Some(_) = alt.pattern {
-                        self.kont.push(Kont::Pop(1));
-                        self.env.push(Rc::clone(&body));
-                    };
-                    Ctrl::Expr(&alt.body)
-                }
+                    Value::Nil => Ctrl::Expr(&alts[0].body),
+                    Value::Cons(head, tail) => {
+                        let alt = &alts[1];
+                        if let Pat::Cons(..) = alt.pattern {
+                            self.kont.push(Kont::Pop(2));
+                            self.env.push(Rc::clone(&head));
+                            self.env.push(Rc::clone(&tail));
+                        };
+                        Ctrl::Expr(&alt.body)
+                    }
+                    Value::None => Ctrl::Expr(&alts[0].body),
+                    Value::Some(body) => {
+                        let alt = &alts[1];
+                        if let Pat::Some(_) = alt.pattern {
+                            self.kont.push(Kont::Pop(1));
+                            self.env.push(Rc::clone(&body));
+                        };
+                        Ctrl::Expr(&alt.body)
+                    }
 
-                _ => panic!("Pattern match on non-data value"),
-            },
+                    _ => panic!("Pattern match on non-data value"),
+                }
+            }
             Kont::Let(_name, body) => {
                 self.kont.push(Kont::Pop(1));
-                self.env.push(Rc::clone(&value));
+                self.env.push(ctrl.into_value());
                 Ctrl::Expr(body)
             }
             Kont::EqualList(eq, mut lhs, mut rhs) => {
-                if value.as_bool() {
+                if ctrl.into_value().as_bool() {
                     match (lhs.next(), rhs.next()) {
                         (None, None) => Ctrl::from_value(Value::Bool(true)),
                         (None, Some(_)) | (Some(_), None) => Ctrl::from_value(Value::Bool(false)),
@@ -572,11 +615,18 @@ impl<'a> State<'a> {
 
             Ctrl::Expr(expr) => self.step_expr(world, expr),
 
-            Ctrl::Value(value) => {
-                if let Value::PAP(ref prim, ref args, 0) = *value {
+            Ctrl::Value(ref value) => {
+                if let Value::PAP(ref prim, ref args, 0) = **value {
                     self.step_saturated_prim(world, store, prim, args)
                 } else {
-                    self.step_value(value)
+                    self.step_value(old_ctrl)
+                }
+            }
+            Ctrl::PAP(ref prim, ref args, missing) => {
+                if missing == 0 {
+                    self.step_saturated_prim(world, store, prim, args)
+                } else {
+                    self.step_value(old_ctrl)
                 }
             }
         };
@@ -590,6 +640,7 @@ impl<'a> State<'a> {
                 Value::PAP(_, _, 0) => false,
                 _ => self.kont.is_empty(),
             },
+            Ctrl::PAP(_, _, missing) => *missing > 0 && self.kont.is_empty(),
             Ctrl::Error(_) => true,
             _ => false,
         }
