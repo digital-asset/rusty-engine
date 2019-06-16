@@ -517,29 +517,10 @@ impl<'a> State<'a> {
                     _ => panic!("Non-value in step_value: {:?}", ctrl),
                 }
             }
-            Kont::Fun(prim2, mut args2, missing2) => {
-                assert!(missing2 > 0);
-                // NOTE(MH): We're short circuitig if the next `kont` frame is an `Arg`
-                // and we're still missing arguments. The unoptimized version would be:
-                // args2.push(Rc::clone(&value));
-                // Ctrl::Value(Rc::new(Value::PAP(prim2, args2, missing2 - 1)))
-                args2.push(ctrl.into_value());
-                if missing2 > 1 {
-                    let kont_opt = self.kont.pop();
-                    match kont_opt {
-                        Some(Kont::Arg(arg)) => {
-                            self.kont.push(Kont::Fun(prim2, args2, missing2 - 1));
-                            Ctrl::Expr(&arg)
-                        }
-                        Some(kont) => {
-                            self.kont.push(kont);
-                            Ctrl::PAP(prim2, args2, missing2 - 1)
-                        }
-                        None => Ctrl::PAP(prim2, args2, missing2 - 1),
-                    }
-                } else {
-                    Ctrl::PAP(prim2, args2, missing2 - 1)
-                }
+            Kont::Fun(prim, mut args, missing) => {
+                assert!(missing > 0);
+                args.push(ctrl.into_value());
+                Ctrl::PAP(prim, args, missing - 1)
             }
             Kont::Match(alts) => {
                 let value = ctrl.into_value();
