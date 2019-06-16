@@ -242,8 +242,7 @@ impl<'a> Iterator for ValueListIter<'a> {
     type Item = Rc<Value<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let this = std::mem::replace(&mut self.0, None);
-        this.map(|(head, tail)| {
+        self.0.take().map(|(head, tail)| {
             *self = tail.as_list();
             head
         })
