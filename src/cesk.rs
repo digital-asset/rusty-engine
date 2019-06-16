@@ -55,6 +55,20 @@ impl<'a> Ctrl<'a> {
         }
     }
 
+    fn into_pap(self) -> (Prim<'a>, Vec<Rc<Value<'a>>>, usize) {
+        match self {
+            Ctrl::Value(value) => {
+                if let Value::PAP(prim, args, missing) = &*value {
+                    (prim.clone(), args.clone(), *missing)
+                } else {
+                    panic!("Applying value: {:?}", value)
+                }
+            }
+            Ctrl::PAP(prim, args, missing) => (prim, args, missing),
+            _ => panic!("Non-value in step_valie: {:?}", self),
+        }
+    }
+
     fn from_prim(prim: Prim<'a>, arity: usize) -> Self {
         // Ctrl::Value(Rc::new(Value::PAP(prim, Vec::new(), arity)))
         Ctrl::PAP(prim, Vec::new(), arity)
@@ -476,46 +490,15 @@ impl<'a> State<'a> {
                 self.env.pop_many(count);
                 ctrl
             }
-            Kont::Arg(arg) => match ctrl {
-                Ctrl::Value(value) => {
-                    if let Value::PAP(prim, args, missing) = &*value {
-                        self.kont
-                            .push(Kont::Fun(prim.clone(), args.clone(), *missing));
-                        Ctrl::Expr(arg)
-                    } else {
-                        panic!("Applying value: {:?}", value)
-                    }
-                }
-                Ctrl::PAP(prim, args, missing) => {
-                    self.kont.push(Kont::Fun(prim, args, missing));
-                    Ctrl::Expr(arg)
-                }
-                _ => panic!("Non-value in step_valie: {:?}", ctrl),
-            },
-            // TODO(MH): This seems inefficient. We should apply all args
-            // in one go.
-            // TODO(MH): Reduce duplication with the above.
+            Kont::Arg(arg) => {
+                let (prim, args, missing) = ctrl.into_pap();
+                self.kont.push(Kont::Fun(prim, args, missing));
+                Ctrl::Expr(arg)
+            }
             Kont::ArgVal(arg) => {
-                match ctrl {
-                    Ctrl::Value(value) => {
-                        if let Value::PAP(prim, args, missing) = &*value {
-                            self.kont
-                                .push(Kont::Fun(prim.clone(), args.clone(), *missing));
-                            Ctrl::Value(arg)
-                        } else {
-                            panic!("Applying value: {:?}", value)
-                        }
-                    }
-                    Ctrl::PAP(prim, args, missing) => {
-                        // TODO(MH): We cannot push `arg` onto `args` and put
-                        // the `PAP` back since `Foldr` puts fully applied
-                        // `Prims`s into `ArgVal`.
-                        assert!(missing > 0);
-                        self.kont.push(Kont::Fun(prim, args, missing));
-                        Ctrl::Value(arg)
-                    }
-                    _ => panic!("Non-value in step_value: {:?}", ctrl),
-                }
+                let (prim, args, missing) = ctrl.into_pap();
+                self.kont.push(Kont::Fun(prim, args, missing));
+                Ctrl::Value(arg)
             }
             Kont::Fun(prim, mut args, missing) => {
                 assert!(missing > 0);
