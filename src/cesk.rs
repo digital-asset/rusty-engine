@@ -57,7 +57,7 @@ enum Kont<'a> {
 
 #[derive(Debug)]
 struct UpdateMode {
-    auth: FnvHashSet<Party>,
+    authorizers: FnvHashSet<Party>,
 }
 
 #[derive(Debug)]
@@ -427,7 +427,7 @@ impl<'a> State<'a> {
 
                 let signatories = args[0].as_party_set();
                 let observers = args[1].as_party_set();
-                if !signatories.is_subset(&update_mode.auth) {
+                if !signatories.is_subset(&update_mode.authorizers) {
                     Ctrl::Error(format!(
                         "authorization missing for {}: {:?}",
                         template.self_ref, payload
@@ -464,7 +464,7 @@ impl<'a> State<'a> {
                 let contract_id = &args[1];
                 let arg = self.env.pop();
 
-                if !controllers.is_subset(&update_mode.auth) {
+                if !controllers.is_subset(&update_mode.authorizers) {
                     Err(format!(
                         "authorization missing for {}@{}: {:?} {:?}",
                         choice.template_ref,
@@ -475,8 +475,8 @@ impl<'a> State<'a> {
                 } else {
                     let contract =
                         store.fetch(&choice.template_ref, contract_id.as_contract_id())?;
-                    let mut new_auth: FnvHashSet<Party> = controllers;
-                    new_auth.extend(contract.signatories.iter().cloned());
+                    let mut new_authorizers: FnvHashSet<Party> = controllers;
+                    new_authorizers.extend(contract.signatories.iter().cloned());
 
                     if choice.consuming {
                         store.archive(&choice.template_ref, contract_id.as_contract_id())?;
@@ -485,22 +485,23 @@ impl<'a> State<'a> {
                     self.env.push(Rc::clone(contract_id));
                     self.env.push(arg);
 
-                    let old_auth = std::mem::replace(&mut update_mode.auth, new_auth);
-                    self.kont.push(Kont::DumpAuth(old_auth));
+                    let old_authorizers =
+                        std::mem::replace(&mut update_mode.authorizers, new_authorizers);
+                    self.kont.push(Kont::DumpAuth(old_authorizers));
                     self.kont.push(Kont::ArgVal(Rc::new(Value::Token)));
                     Ok(Ctrl::Expr(&choice.consequence))
                 }
             }),
             Prim::Submit { should_succeed } => {
                 let submitter = args[0].as_party().clone();
-                let mut auth = FnvHashSet::default();
-                auth.insert(submitter);
+                let mut authorizers = FnvHashSet::default();
+                authorizers.insert(submitter);
                 let update = Rc::clone(&args[1]);
                 let mut state = State {
                     ctrl: Ctrl::Value(update),
                     env: Env::new(),
                     kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
-                    mode: Mode::Update(UpdateMode { auth }),
+                    mode: Mode::Update(UpdateMode { authorizers }),
                     time: self.time,
                 };
                 while !state.is_final() {
@@ -545,8 +546,8 @@ impl<'a> State<'a> {
                 self.env = env;
                 ctrl
             }
-            Kont::DumpAuth(auth) => {
-                self.mode.as_mut_update_mode().auth = auth;
+            Kont::DumpAuth(authorizers) => {
+                self.mode.as_mut_update_mode().authorizers = authorizers;
                 ctrl
             }
             Kont::Pop(count) => {
