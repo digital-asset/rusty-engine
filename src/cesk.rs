@@ -9,10 +9,34 @@ use crate::store::Store;
 use crate::value::*;
 
 #[derive(Debug)]
+pub enum Prim<'a> {
+    Builtin(Builtin),
+    Lam(&'a Expr, Env<'a>),
+    RecCon(&'a TypeConRef, &'a Vec<String>),
+    RecProj(&'a TypeConRef, &'a String),
+    RecUpd(&'a TypeConRef, &'a String),
+    VariantCon(&'a TypeConRef, &'a String),
+    CreateCall(&'a TypeConRef),
+    CreateCheckPrecondition(&'a TypeConRef),
+    CreateExec(&'a TypeConRef),
+    Fetch(&'a TypeConRef),
+    ExerciseCall(&'a TypeConRef, &'a String),
+    ExerciseExec(&'a TypeConRef, &'a String),
+    Submit { should_succeed: bool },
+}
+
+#[derive(Debug)]
+struct PAP<'a> {
+    prim: Prim<'a>,
+    args: Vec<Rc<Value<'a>>>,
+    missing: usize,
+}
+
+#[derive(Debug)]
 enum Ctrl<'a> {
     Evaluating,
     Expr(&'a Expr),
-    PAP(Prim<'a>, Vec<Rc<Value<'a>>>, usize),
+    PAP(PAP<'a>),
     Value(Rc<Value<'a>>),
     Error(String),
 }
@@ -24,7 +48,7 @@ enum Kont<'a> {
     Pop(usize),
     Arg(&'a Expr),
     ArgVal(Rc<Value<'a>>),
-    Fun(Prim<'a>, Vec<Rc<Value<'a>>>, usize),
+    Fun(PAP<'a>),
     Match(&'a Vec<Alt>),
     Let(&'a Binder, &'a Expr),
     EqualList(Rc<Value<'a>>, ValueListIter<'a>, ValueListIter<'a>),
@@ -47,31 +71,45 @@ impl<'a> Ctrl<'a> {
     fn into_value(self) -> Rc<Value<'a>> {
         match self {
             Ctrl::Value(value) => value,
-            Ctrl::PAP(prim, args, missing) => match prim {
-                Prim::Builtin(_) | Prim::Lam(_, _) => Rc::new(Value::PAP(prim, args, missing)),
+            Ctrl::PAP(PAP {
+                prim,
+                args,
+                missing,
+            }) => match prim {
+                Prim::Builtin(builtin) => Rc::new(Value::PAP(builtin, args, missing)),
+                Prim::Lam(body, env) => Rc::new(Value::Lam(body, env, args, missing)),
                 _ => panic!("Putting bad prim in heap: {:?}", prim),
             },
             _ => panic!("expected value, found {:?}", self),
         }
     }
 
-    fn into_pap(self) -> (Prim<'a>, Vec<Rc<Value<'a>>>, usize) {
+    fn into_pap(self) -> PAP<'a> {
         match self {
-            Ctrl::Value(value) => {
-                if let Value::PAP(prim, args, missing) = &*value {
-                    (prim.clone(), args.clone(), *missing)
-                } else {
-                    panic!("Applying value: {:?}", value)
-                }
-            }
-            Ctrl::PAP(prim, args, missing) => (prim, args, missing),
-            _ => panic!("Non-value in step_valie: {:?}", self),
+            Ctrl::Value(value) => match &*value {
+                Value::PAP(builtin, args, missing) => PAP {
+                    prim: Prim::Builtin(*builtin),
+                    args: args.clone(),
+                    missing: *missing,
+                },
+                Value::Lam(body, env, args, missing) => PAP {
+                    prim: Prim::Lam(body, env.clone()),
+                    args: args.clone(),
+                    missing: *missing,
+                },
+                _ => panic!("expected PAP, found {:?}", value),
+            },
+            Ctrl::PAP(pap) => pap,
+            _ => panic!("expected PAP, found {:?}", self),
         }
     }
 
     fn from_prim(prim: Prim<'a>, arity: usize) -> Self {
-        // Ctrl::Value(Rc::new(Value::PAP(prim, Vec::new(), arity)))
-        Ctrl::PAP(prim, Vec::new(), arity)
+        Ctrl::PAP(PAP {
+            prim,
+            args: Vec::new(),
+            missing: arity,
+        })
     }
 
     fn catch<F>(f: F) -> Self
@@ -260,11 +298,8 @@ impl<'a> State<'a> {
                         // NOTE(MH): Putting a fully applied `Prim` into
                         // `ArgVal` is a bit sketchy since it prevents us from
                         // assuming that `ArgVal` is a proper value.
-                        self.kont.push(Kont::ArgVal(Rc::new(Value::PAP(
-                            Prim::Builtin(Builtin::Foldr),
-                            args2,
-                            0,
-                        ))));
+                        self.kont
+                            .push(Kont::ArgVal(Rc::new(Value::PAP(Builtin::Foldr, args2, 0))));
                         self.kont.push(Kont::ArgVal(Rc::clone(x)));
                         Ctrl::Value(Rc::clone(f))
                     }
@@ -280,9 +315,12 @@ impl<'a> State<'a> {
                     // foldl f z (x::xs) = foldl f (f z x) xs
                     Value::Cons(x, xs) => {
                         self.kont.push(Kont::ArgVal(Rc::clone(xs)));
-                        let args2 = vec![Rc::clone(f)];
-                        self.kont
-                            .push(Kont::Fun(Prim::Builtin(Builtin::Foldl), args2, 2));
+                        let pap = PAP {
+                            prim: Prim::Builtin(Builtin::Foldl),
+                            args: vec![Rc::clone(f)],
+                            missing: 2,
+                        };
+                        self.kont.push(Kont::Fun(pap));
                         self.kont.push(Kont::ArgVal(Rc::clone(x)));
                         self.kont.push(Kont::ArgVal(Rc::clone(z)));
                         Ctrl::Value(Rc::clone(f))
@@ -491,19 +529,18 @@ impl<'a> State<'a> {
                 ctrl
             }
             Kont::Arg(arg) => {
-                let (prim, args, missing) = ctrl.into_pap();
-                self.kont.push(Kont::Fun(prim, args, missing));
+                self.kont.push(Kont::Fun(ctrl.into_pap()));
                 Ctrl::Expr(arg)
             }
             Kont::ArgVal(arg) => {
-                let (prim, args, missing) = ctrl.into_pap();
-                self.kont.push(Kont::Fun(prim, args, missing));
+                self.kont.push(Kont::Fun(ctrl.into_pap()));
                 Ctrl::Value(arg)
             }
-            Kont::Fun(prim, mut args, missing) => {
-                assert!(missing > 0);
-                args.push(ctrl.into_value());
-                Ctrl::PAP(prim, args, missing - 1)
+            Kont::Fun(mut pap) => {
+                assert!(pap.missing > 0);
+                pap.args.push(ctrl.into_value());
+                pap.missing -= 1;
+                Ctrl::PAP(pap)
             }
             Kont::Match(alts) => {
                 let value = ctrl.into_value();
@@ -580,13 +617,17 @@ impl<'a> State<'a> {
             Ctrl::Expr(expr) => self.step_expr(world, expr),
 
             Ctrl::Value(ref value) => {
-                if let Value::PAP(ref prim, ref args, 0) = **value {
-                    self.step_saturated_prim(world, store, prim, args)
+                if let Value::PAP(prim, ref args, 0) = **value {
+                    self.step_saturated_prim(world, store, &Prim::Builtin(prim), args)
                 } else {
                     self.step_value(old_ctrl)
                 }
             }
-            Ctrl::PAP(ref prim, ref args, missing) => {
+            Ctrl::PAP(PAP {
+                ref prim,
+                ref args,
+                missing,
+            }) => {
                 if missing == 0 {
                     self.step_saturated_prim(world, store, prim, args)
                 } else {
@@ -604,7 +645,7 @@ impl<'a> State<'a> {
                 Value::PAP(_, _, 0) => false,
                 _ => self.kont.is_empty(),
             },
-            Ctrl::PAP(_, _, missing) => *missing > 0 && self.kont.is_empty(),
+            Ctrl::PAP(pap) => pap.missing > 0 && self.kont.is_empty(),
             Ctrl::Error(_) => true,
             _ => false,
         }

@@ -12,24 +12,6 @@ pub struct Env<'a> {
     pub stack: Vec<Rc<Value<'a>>>,
 }
 
-// NOTE(MH): Cloning this must remain cheap.
-#[derive(Debug, Clone)]
-pub enum Prim<'a> {
-    Builtin(Builtin),
-    RecCon(&'a TypeConRef, &'a Vec<String>),
-    RecProj(&'a TypeConRef, &'a String),
-    RecUpd(&'a TypeConRef, &'a String),
-    VariantCon(&'a TypeConRef, &'a String),
-    Lam(&'a Expr, Env<'a>),
-    CreateCall(&'a TypeConRef),
-    CreateCheckPrecondition(&'a TypeConRef),
-    CreateExec(&'a TypeConRef),
-    Fetch(&'a TypeConRef),
-    ExerciseCall(&'a TypeConRef, &'a String),
-    ExerciseExec(&'a TypeConRef, &'a String),
-    Submit { should_succeed: bool },
-}
-
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Party(String);
 
@@ -59,7 +41,8 @@ pub enum Value<'a> {
     None,
     Some(Rc<Value<'a>>),
     Token, // The "real world" token for the `Update` monad.
-    PAP(Prim<'a>, Vec<Rc<Value<'a>>>, usize),
+    PAP(Builtin, Vec<Rc<Value<'a>>>, usize),
+    Lam(&'a Expr, Env<'a>, Vec<Rc<Value<'a>>>, usize),
 }
 
 #[derive(Debug)]
