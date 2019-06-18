@@ -13,6 +13,7 @@ pub struct Contract<'a> {
     pub payload: Rc<Value<'a>>,
     pub signatories: FnvHashSet<Party>,
     pub observers: FnvHashSet<Party>,
+    pub witnesses: FnvHashSet<Party>,
 }
 
 #[derive(Debug)]

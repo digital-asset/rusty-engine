@@ -45,7 +45,10 @@ enum Ctrl<'a> {
 #[derive(Debug)]
 enum Kont<'a> {
     Dump(Env<'a>),
-    DumpAuth(FnvHashSet<Party>),
+    DumpParties {
+        authorizers: FnvHashSet<Party>,
+        witnesses: FnvHashSet<Party>,
+    },
     Pop(usize),
     Arg(&'a Expr),
     ArgVal(Rc<Value<'a>>),
@@ -58,6 +61,7 @@ enum Kont<'a> {
 #[derive(Debug)]
 struct UpdateMode {
     authorizers: FnvHashSet<Party>,
+    witnesses: FnvHashSet<Party>,
 }
 
 #[derive(Debug)]
@@ -438,6 +442,7 @@ impl<'a> State<'a> {
                         payload,
                         signatories,
                         observers,
+                        witnesses: update_mode.witnesses.clone(),
                     });
                     Ctrl::from_value(Value::ContractId(contract_id))
                 }
@@ -481,8 +486,11 @@ impl<'a> State<'a> {
                         store.fetch(&choice.template_ref, contract_id.as_contract_id())?;
                     let mut new_authorizers: FnvHashSet<Party> = controllers;
                     new_authorizers.extend(contract.signatories.iter().cloned());
+                    let mut new_witnesses = update_mode.witnesses.clone();
+                    new_witnesses.extend(contract.signatories.iter().cloned());
 
                     if choice.consuming {
+                        new_witnesses.extend(contract.observers.iter().cloned());
                         store.archive(&choice.template_ref, contract_id.as_contract_id())?;
                     }
 
@@ -491,7 +499,12 @@ impl<'a> State<'a> {
 
                     let old_authorizers =
                         std::mem::replace(&mut update_mode.authorizers, new_authorizers);
-                    self.kont.push(Kont::DumpAuth(old_authorizers));
+                    let old_witnesses =
+                        std::mem::replace(&mut update_mode.witnesses, new_witnesses);
+                    self.kont.push(Kont::DumpParties {
+                        authorizers: old_authorizers,
+                        witnesses: old_witnesses,
+                    });
                     self.kont.push(Kont::ArgVal(Rc::new(Value::Token)));
                     Ok(Ctrl::Expr(&choice.consequence))
                 }
@@ -500,12 +513,16 @@ impl<'a> State<'a> {
                 let submitter = args[0].as_party().clone();
                 let mut authorizers = FnvHashSet::default();
                 authorizers.insert(submitter);
+                let witnesses = authorizers.clone();
                 let update = Rc::clone(&args[1]);
                 let mut state = State {
                     ctrl: Ctrl::Value(update),
                     env: Env::new(),
                     kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
-                    mode: Mode::Update(UpdateMode { authorizers }),
+                    mode: Mode::Update(UpdateMode {
+                        authorizers,
+                        witnesses,
+                    }),
                     time: self.time,
                 };
                 while !state.is_final() {
@@ -550,8 +567,13 @@ impl<'a> State<'a> {
                 self.env = env;
                 ctrl
             }
-            Kont::DumpAuth(authorizers) => {
-                self.mode.as_mut_update_mode().authorizers = authorizers;
+            Kont::DumpParties {
+                authorizers,
+                witnesses,
+            } => {
+                let update_mode = self.mode.as_mut_update_mode();
+                update_mode.authorizers = authorizers;
+                update_mode.witnesses = witnesses;
                 ctrl
             }
             Kont::Pop(count) => {
