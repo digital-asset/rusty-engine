@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use crate::ast::*;
 use crate::builtin::*;
-use crate::store::Store;
+use crate::store::*;
 use crate::value::*;
 
 #[derive(Debug)]
@@ -433,8 +433,12 @@ impl<'a> State<'a> {
                         template.self_ref, payload
                     ))
                 } else {
-                    let contract_id =
-                        store.create(&template.self_ref, payload, signatories, observers);
+                    let contract_id = store.create(Contract {
+                        template_ref: &template.self_ref,
+                        payload,
+                        signatories,
+                        observers,
+                    });
                     Ctrl::from_value(Value::ContractId(contract_id))
                 }
             }
