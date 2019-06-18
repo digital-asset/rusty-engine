@@ -60,6 +60,7 @@ enum Kont<'a> {
 
 #[derive(Debug)]
 struct UpdateMode {
+    submitter: Party,
     authorizers: FnvHashSet<Party>,
     witnesses: FnvHashSet<Party>,
 }
@@ -433,28 +434,53 @@ impl<'a> State<'a> {
                 let observers = args[1].as_party_set();
                 if !signatories.is_subset(&update_mode.authorizers) {
                     Ctrl::Error(format!(
-                        "authorization missing for {}: {:?}",
+                        "authorization missing for create {}: {:?}",
                         template.self_ref, payload
                     ))
                 } else {
+                    let mut witnesses = update_mode.witnesses.clone();
+                    witnesses.extend(signatories.iter().cloned());
+                    witnesses.extend(observers.iter().cloned());
+
                     let contract_id = store.create(Contract {
                         template_ref: &template.self_ref,
                         payload,
                         signatories,
                         observers,
-                        witnesses: update_mode.witnesses.clone(),
+                        witnesses,
                     });
                     Ctrl::from_value(Value::ContractId(contract_id))
                 }
             }
             Prim::Fetch(template_ref) => Ctrl::catch(|| {
+                let update_mode = self.mode.as_update_mode();
                 let contract_id = args[0].as_contract_id();
-                let contract = store.fetch(template_ref, contract_id)?;
-                Ok(Ctrl::Value(Rc::clone(&contract.payload)))
+                let contract = store.fetch(
+                    &update_mode.submitter,
+                    &update_mode.witnesses,
+                    template_ref,
+                    contract_id,
+                )?;
+                if update_mode.authorizers.is_disjoint(&contract.signatories)
+                    && update_mode.authorizers.is_disjoint(&contract.observers)
+                {
+                    Err(format!(
+                        "authorization missing for fetch {}: {:?}",
+                        template_ref, contract_id
+                    ))
+                } else {
+                    Ok(Ctrl::Value(Rc::clone(&contract.payload)))
+                }
             }),
             Prim::ExerciseCall(choice) => Ctrl::catch(|| {
+                let update_mode = self.mode.as_update_mode();
                 let contract_id = &args[0];
-                let contract = store.fetch(&choice.template_ref, contract_id.as_contract_id())?;
+                let contract = store.fetch(
+                    &update_mode.submitter,
+                    &update_mode.witnesses,
+                    &choice.template_ref,
+                    contract_id.as_contract_id(),
+                )?;
                 let payload = Rc::clone(&contract.payload);
                 let arg = Rc::clone(&args[1]);
 
@@ -475,15 +501,19 @@ impl<'a> State<'a> {
 
                 if !controllers.is_subset(&update_mode.authorizers) {
                     Err(format!(
-                        "authorization missing for {}@{}: {:?} {:?}",
+                        "authorization missing for exercise {}@{}: {:?} {:?}",
                         choice.template_ref,
                         choice.name,
                         contract_id.as_contract_id(),
                         arg,
                     ))
                 } else {
-                    let contract =
-                        store.fetch(&choice.template_ref, contract_id.as_contract_id())?;
+                    let contract = store.fetch(
+                        &update_mode.submitter,
+                        &update_mode.witnesses,
+                        &choice.template_ref,
+                        contract_id.as_contract_id(),
+                    )?;
                     let mut new_authorizers: FnvHashSet<Party> = controllers;
                     new_authorizers.extend(contract.signatories.iter().cloned());
                     let mut new_witnesses = update_mode.witnesses.clone();
@@ -491,7 +521,12 @@ impl<'a> State<'a> {
 
                     if choice.consuming {
                         new_witnesses.extend(contract.observers.iter().cloned());
-                        store.archive(&choice.template_ref, contract_id.as_contract_id())?;
+                        store.archive(
+                            &update_mode.submitter,
+                            &update_mode.witnesses,
+                            &choice.template_ref,
+                            contract_id.as_contract_id(),
+                        )?;
                     }
 
                     self.env.push(Rc::clone(contract_id));
@@ -512,7 +547,7 @@ impl<'a> State<'a> {
             Prim::Submit { should_succeed } => {
                 let submitter = args[0].as_party().clone();
                 let mut authorizers = FnvHashSet::default();
-                authorizers.insert(submitter);
+                authorizers.insert(submitter.clone());
                 let witnesses = authorizers.clone();
                 let update = Rc::clone(&args[1]);
                 let mut state = State {
@@ -520,6 +555,7 @@ impl<'a> State<'a> {
                     env: Env::new(),
                     kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
                     mode: Mode::Update(UpdateMode {
+                        submitter,
                         authorizers,
                         witnesses,
                     }),

@@ -13,6 +13,9 @@ pub struct Contract<'a> {
     pub payload: Rc<Value<'a>>,
     pub signatories: FnvHashSet<Party>,
     pub observers: FnvHashSet<Party>,
+    // NOTE(MH): `witnesses` contains both, the parties that witnessed the
+    // creation of this contract and the parties that witnessed a fetch or
+    // exercise on it.
     pub witnesses: FnvHashSet<Party>,
 }
 
@@ -32,10 +35,10 @@ pub struct Store<'a> {
 
 impl<'a> Entry<'a> {
     fn get_typechecked(
-        &self,
+        &mut self,
         expected_template_ref: &'a TypeConRef,
         contract_id: &ContractId,
-    ) -> Result<&Contract<'a>, String> {
+    ) -> Result<&mut Contract<'a>, String> {
         match self {
             Entry::Active(contract) => {
                 if contract.template_ref == expected_template_ref {
@@ -68,26 +71,38 @@ impl<'a> Store<'a> {
     }
 
     pub fn fetch(
-        &self,
+        &mut self,
+        submitter: &Party,
+        witnesses: &FnvHashSet<Party>,
         template_ref: &'a TypeConRef,
         contract_id: &ContractId,
     ) -> Result<&Contract<'a>, String> {
-        let entry_opt = self
-            .pending
-            .get(contract_id)
-            .or_else(|| self.committed.get(contract_id));
+        let entry_opt = match self.pending.get_mut(contract_id) {
+            Some(entry) => Some(entry),
+            None => self.committed.get_mut(contract_id),
+        };
         match entry_opt {
             None => Err(format!("unknown contract id: {}", contract_id)),
-            Some(entry) => entry.get_typechecked(template_ref, contract_id),
+            Some(entry) => {
+                let contract = entry.get_typechecked(template_ref, contract_id)?;
+                if contract.witnesses.contains(submitter) {
+                    contract.witnesses.extend(witnesses.iter().cloned());
+                    Ok(contract)
+                } else {
+                    Err(format!("undisclosed contract id: {}", contract_id))
+                }
+            }
         }
     }
 
     pub fn archive(
         &mut self,
+        submitter: &Party,
+        witnesses: &FnvHashSet<Party>,
         template_ref: &'a TypeConRef,
         contract_id: &ContractId,
     ) -> Result<(), String> {
-        self.fetch(template_ref, contract_id)?;
+        self.fetch(submitter, witnesses, template_ref, contract_id)?;
         // TODO(MH): There's no need to clone the contract id when it is
         // already present in the pending contracts.
         self.pending.insert(contract_id.clone(), Entry::Archived);

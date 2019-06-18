@@ -154,7 +154,7 @@ main = scenario do
   submitMustFail alice do exercise rest Archive
 
   -- Alice didn't disclose her remaining IOUs to Bob.
-  -- TODO(MH): submitMustFail bob do fetch rest
+  submitMustFail bob do fetch rest
 
   -- Issuer can archive
   submit bank do archive rest
