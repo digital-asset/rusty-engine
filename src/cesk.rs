@@ -56,12 +56,23 @@ enum Kont<'a> {
 }
 
 #[derive(Debug)]
+struct UpdateMode {
+    auth: FnvHashSet<Party>,
+}
+
+#[derive(Debug)]
+enum Mode {
+    Update(UpdateMode),
+    Scenario,
+}
+
+#[derive(Debug)]
 pub struct State<'a> {
     ctrl: Ctrl<'a>,
     env: Env<'a>,
     kont: Vec<Kont<'a>>,
-    auth: FnvHashSet<Party>,
     time: Time,
+    mode: Mode,
 }
 
 impl<'a> Ctrl<'a> {
@@ -124,13 +135,29 @@ impl<'a> Ctrl<'a> {
     }
 }
 
+impl Mode {
+    fn as_update_mode(&self) -> &UpdateMode {
+        match self {
+            Mode::Update(update_mode) => update_mode,
+            Mode::Scenario => panic!("expected UpdateMode, found {:?}", self),
+        }
+    }
+
+    fn as_mut_update_mode(&mut self) -> &mut UpdateMode {
+        match self {
+            Mode::Update(update_mode) => update_mode,
+            Mode::Scenario => panic!("expected UpdateMode, found {:?}", self),
+        }
+    }
+}
+
 impl<'a> State<'a> {
     pub fn init(expr: &'a Expr) -> Self {
         State {
             ctrl: Ctrl::Expr(expr),
             env: Env::new(),
             kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
-            auth: FnvHashSet::default(),
+            mode: Mode::Scenario,
             time: Time::EPOCH,
         }
     }
@@ -396,10 +423,11 @@ impl<'a> State<'a> {
             }
             Prim::CreateExec(template) => {
                 let payload = self.env.pop();
+                let update_mode = self.mode.as_update_mode();
 
                 let signatories = args[0].as_party_set();
                 let observers = args[1].as_party_set();
-                if !signatories.is_subset(&self.auth) {
+                if !signatories.is_subset(&update_mode.auth) {
                     Ctrl::Error(format!(
                         "authorization missing for {}: {:?}",
                         template.self_ref, payload
@@ -431,11 +459,12 @@ impl<'a> State<'a> {
                 Ok(Ctrl::from_prim(Prim::ExerciseExec(choice), 2))
             }),
             Prim::ExerciseExec(choice) => Ctrl::catch(|| {
+                let update_mode = self.mode.as_mut_update_mode();
                 let controllers = args[0].as_party_set();
                 let contract_id = &args[1];
                 let arg = self.env.pop();
 
-                if !controllers.is_subset(&self.auth) {
+                if !controllers.is_subset(&update_mode.auth) {
                     Err(format!(
                         "authorization missing for {}@{}: {:?} {:?}",
                         choice.template_ref,
@@ -456,7 +485,7 @@ impl<'a> State<'a> {
                     self.env.push(Rc::clone(contract_id));
                     self.env.push(arg);
 
-                    let old_auth = std::mem::replace(&mut self.auth, new_auth);
+                    let old_auth = std::mem::replace(&mut update_mode.auth, new_auth);
                     self.kont.push(Kont::DumpAuth(old_auth));
                     self.kont.push(Kont::ArgVal(Rc::new(Value::Token)));
                     Ok(Ctrl::Expr(&choice.consequence))
@@ -471,7 +500,7 @@ impl<'a> State<'a> {
                     ctrl: Ctrl::Value(update),
                     env: Env::new(),
                     kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
-                    auth,
+                    mode: Mode::Update(UpdateMode { auth }),
                     time: self.time,
                 };
                 while !state.is_final() {
@@ -517,7 +546,7 @@ impl<'a> State<'a> {
                 ctrl
             }
             Kont::DumpAuth(auth) => {
-                self.auth = auth;
+                self.mode.as_mut_update_mode().auth = auth;
                 ctrl
             }
             Kont::Pop(count) => {
