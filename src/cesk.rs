@@ -16,12 +16,12 @@ pub enum Prim<'a> {
     RecProj(&'a TypeConRef, &'a String),
     RecUpd(&'a TypeConRef, &'a String),
     VariantCon(&'a TypeConRef, &'a String),
-    CreateCall(&'a TypeConRef),
-    CreateCheckPrecondition(&'a TypeConRef),
-    CreateExec(&'a TypeConRef),
+    CreateCall(&'a DefTemplate),
+    CreateCheckPrecondition(&'a DefTemplate),
+    CreateExec(&'a DefTemplate),
     Fetch(&'a TypeConRef),
-    ExerciseCall(&'a TypeConRef, &'a String),
-    ExerciseExec(&'a TypeConRef, &'a String),
+    ExerciseCall(&'a Choice),
+    ExerciseExec(&'a Choice),
     Submit { should_succeed: bool },
     AdvanceTime,
 }
@@ -227,8 +227,9 @@ impl<'a> State<'a> {
                 template_ref,
                 payload,
             } => {
+                let template = world.get_template(template_ref);
                 self.kont.push(Kont::Arg(payload));
-                Ctrl::from_prim(Prim::CreateCall(template_ref), 1)
+                Ctrl::from_prim(Prim::CreateCall(template), 1)
             }
             Expr::Fetch {
                 template_ref,
@@ -243,11 +244,11 @@ impl<'a> State<'a> {
                 contract_id,
                 arg,
             } => {
-                // TODO(MH): Lookup template and choice here instead of
-                // multiple times further down.
+                let template = world.get_template(template_ref);
+                let choice = template.choices.get::<String>(choice).unwrap();
                 self.kont.push(Kont::Arg(arg));
                 self.kont.push(Kont::Arg(contract_id));
-                Ctrl::from_prim(Prim::ExerciseCall(template_ref, choice), 2)
+                Ctrl::from_prim(Prim::ExerciseCall(&choice), 2)
             }
             Expr::Submit {
                 should_succeed,
@@ -369,33 +370,31 @@ impl<'a> State<'a> {
                 Ctrl::Expr(body)
             }
 
-            Prim::CreateCall(template_ref) => {
+            Prim::CreateCall(template) => {
                 let payload = Rc::clone(&args[0]);
-                let template = world.get_template(template_ref);
 
                 let mut new_env = Env::new();
                 new_env.push(payload);
                 let old_env = std::mem::replace(&mut self.env, new_env);
                 self.kont.push(Kont::Dump(old_env));
                 self.kont.push(Kont::Arg(&template.precondtion));
-                Ctrl::from_prim(Prim::CreateCheckPrecondition(template_ref), 1)
+                Ctrl::from_prim(Prim::CreateCheckPrecondition(template), 1)
             }
-            Prim::CreateCheckPrecondition(template_ref) => {
-                let template = world.get_template(template_ref);
+            Prim::CreateCheckPrecondition(template) => {
                 let payload = self.env.top();
                 let precondtion: bool = args[0].as_bool();
                 if !precondtion {
                     Ctrl::Error(format!(
                         "Template pre-condition violated for {}: {:?}",
-                        template_ref, payload
+                        template.self_ref, payload
                     ))
                 } else {
                     self.kont.push(Kont::Arg(&template.observers));
                     self.kont.push(Kont::Arg(&template.signatories));
-                    Ctrl::from_prim(Prim::CreateExec(template_ref), 2)
+                    Ctrl::from_prim(Prim::CreateExec(template), 2)
                 }
             }
-            Prim::CreateExec(template_ref) => {
+            Prim::CreateExec(template) => {
                 let payload = self.env.pop();
 
                 let signatories = args[0].as_party_set();
@@ -403,10 +402,11 @@ impl<'a> State<'a> {
                 if !signatories.is_subset(&self.auth) {
                     Ctrl::Error(format!(
                         "authorization missing for {}: {:?}",
-                        template_ref, payload
+                        template.self_ref, payload
                     ))
                 } else {
-                    let contract_id = store.create(template_ref, payload, signatories, observers);
+                    let contract_id =
+                        store.create(&template.self_ref, payload, signatories, observers);
                     Ctrl::from_value(Value::ContractId(contract_id))
                 }
             }
@@ -415,12 +415,9 @@ impl<'a> State<'a> {
                 let contract = store.fetch(template_ref, contract_id)?;
                 Ok(Ctrl::Value(Rc::clone(&contract.payload)))
             }),
-            Prim::ExerciseCall(template_ref, choice_name) => Ctrl::catch(|| {
-                let template = world.get_template(template_ref);
-                let choice = template.choices.get::<String>(choice_name).unwrap();
-
+            Prim::ExerciseCall(choice) => Ctrl::catch(|| {
                 let contract_id = &args[0];
-                let contract = store.fetch(template_ref, contract_id.as_contract_id())?;
+                let contract = store.fetch(&choice.template_ref, contract_id.as_contract_id())?;
                 let payload = Rc::clone(&contract.payload);
                 let arg = Rc::clone(&args[1]);
 
@@ -431,15 +428,9 @@ impl<'a> State<'a> {
                 self.kont.push(Kont::Dump(old_env));
                 self.kont.push(Kont::ArgVal(Rc::clone(contract_id)));
                 self.kont.push(Kont::Arg(&choice.controllers));
-                Ok(Ctrl::from_prim(
-                    Prim::ExerciseExec(template_ref, choice_name),
-                    2,
-                ))
+                Ok(Ctrl::from_prim(Prim::ExerciseExec(choice), 2))
             }),
-            Prim::ExerciseExec(template_ref, choice_name) => Ctrl::catch(|| {
-                let template = world.get_template(template_ref);
-                let choice = template.choices.get::<String>(choice_name).unwrap();
-
+            Prim::ExerciseExec(choice) => Ctrl::catch(|| {
                 let controllers = args[0].as_party_set();
                 let contract_id = &args[1];
                 let arg = self.env.pop();
@@ -447,19 +438,19 @@ impl<'a> State<'a> {
                 if !controllers.is_subset(&self.auth) {
                     Err(format!(
                         "authorization missing for {}@{}: {:?} {:?}",
-                        template_ref,
-                        choice_name,
+                        choice.template_ref,
+                        choice.name,
                         contract_id.as_contract_id(),
                         arg,
                     ))
                 } else {
-                    // TODO(MH): Avoid fetching contract a second time.
-                    let contract = store.fetch(template_ref, contract_id.as_contract_id())?;
+                    let contract =
+                        store.fetch(&choice.template_ref, contract_id.as_contract_id())?;
                     let mut new_auth: FnvHashSet<Party> = controllers;
                     new_auth.extend(contract.signatories.iter().cloned());
 
                     if choice.consuming {
-                        store.archive(template_ref, contract_id.as_contract_id())?;
+                        store.archive(&choice.template_ref, contract_id.as_contract_id())?;
                     }
 
                     self.env.push(Rc::clone(contract_id));

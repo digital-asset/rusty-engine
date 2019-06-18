@@ -76,7 +76,7 @@ pub fn dotted_name_from_proto(proto: Option<Box<daml_lf_1::DottedName>>) -> Stri
     proto.unwrap().segments.into_vec().join(".")
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModuleRef {
     pub package_id: PackageId,
     pub module_name: String,
@@ -105,7 +105,7 @@ impl ModuleRef {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TypeConRef {
     module_ref: ModuleRef,
     name: String,
@@ -891,6 +891,7 @@ impl DefValue {
 #[derive(Debug)]
 pub struct Choice {
     pub name: String,
+    pub template_ref: TypeConRef,
     pub consuming: bool,
     pub self_binder: Binder,
     pub arg_binder: Binder,
@@ -899,8 +900,13 @@ pub struct Choice {
 }
 
 impl Choice {
-    fn from_proto(proto: daml_lf_1::TemplateChoice, env: &mut Env) -> Self {
+    fn from_proto(
+        proto: daml_lf_1::TemplateChoice,
+        template_ref: &TypeConRef,
+        env: &mut Env,
+    ) -> Self {
         let name = proto.name;
+        let template_ref = template_ref.clone();
         let consuming = proto.consuming;
         let self_binder = proto.self_binder;
         let arg_binder = proto.arg_binder.unwrap().var;
@@ -912,6 +918,7 @@ impl Choice {
         env.pop_many(&[&self_binder, &arg_binder]);
         Choice {
             name,
+            template_ref,
             consuming,
             self_binder,
             arg_binder,
@@ -924,6 +931,7 @@ impl Choice {
 #[derive(Debug)]
 pub struct DefTemplate {
     pub name: String,
+    pub self_ref: TypeConRef,
     pub this_binder: Binder,
     pub precondtion: Expr,
     pub signatories: Expr,
@@ -932,8 +940,12 @@ pub struct DefTemplate {
 }
 
 impl DefTemplate {
-    fn from_proto(proto: daml_lf_1::DefTemplate, env: &mut Env) -> Self {
+    fn from_proto(proto: daml_lf_1::DefTemplate, module_ref: &ModuleRef, env: &mut Env) -> Self {
         let name = dotted_name_from_proto(proto.tycon);
+        let self_ref = TypeConRef {
+            module_ref: module_ref.clone(),
+            name: name.clone(),
+        };
         let this_binder = proto.param;
         env.push(&this_binder);
         let precondtion = Expr::from_proto(proto.precond, env);
@@ -943,13 +955,14 @@ impl DefTemplate {
             .choices
             .into_iter()
             .map(|choice_proto| {
-                let choice = Choice::from_proto(choice_proto, env);
+                let choice = Choice::from_proto(choice_proto, &self_ref, env);
                 (choice.name.clone(), choice)
             })
             .collect();
         env.pop(&this_binder);
         DefTemplate {
             name,
+            self_ref,
             this_binder,
             precondtion,
             signatories,
@@ -962,13 +975,18 @@ impl DefTemplate {
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
+    pub self_ref: ModuleRef,
     pub values: FnvHashMap<String, DefValue>,
     templates: FnvHashMap<String, DefTemplate>,
 }
 
 impl Module {
-    fn from_proto(proto: daml_lf_1::Module, env: &mut Env) -> Self {
+    fn from_proto(proto: daml_lf_1::Module, package_id: &str, env: &mut Env) -> Self {
         let name = dotted_name_from_proto(proto.name);
+        let self_ref = ModuleRef {
+            package_id: package_id.to_string(),
+            module_name: name.clone(),
+        };
         let values = proto
             .values
             .into_iter()
@@ -981,12 +999,13 @@ impl Module {
             .templates
             .into_iter()
             .map(|template_proto| {
-                let template = DefTemplate::from_proto(template_proto, env);
+                let template = DefTemplate::from_proto(template_proto, &self_ref, env);
                 (template.name.clone(), template)
             })
             .collect();
         Module {
             name,
+            self_ref,
             values,
             templates,
         }
@@ -1011,7 +1030,7 @@ impl Package {
                     .modules
                     .into_iter()
                     .map(|module_proto| {
-                        let module = Module::from_proto(module_proto, &mut env);
+                        let module = Module::from_proto(module_proto, &id, &mut env);
                         (module.name.clone(), module)
                     })
                     .collect()
