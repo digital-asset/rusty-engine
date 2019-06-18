@@ -182,8 +182,6 @@ pub enum Builtin {
     // Time operations
     TimeToMicrosSinceEpoch,
     TimeFromMicrosSinceEpoch,
-    GetTime,
-    AdvanceTime,
 
     // Date comparison
     EqualDate,
@@ -476,6 +474,10 @@ pub enum Expr {
         submitter: Box<Expr>,
         update: Box<Expr>,
     },
+    GetTime,
+    AdvanceTime {
+        delta: Box<Expr>,
+    },
 
     Unsupported(&'static str),
 }
@@ -735,7 +737,7 @@ impl Expr {
                     arg,
                 }
             }
-            get_time(_) => Expr::Builtin(Builtin::GetTime),
+            get_time(_) => Expr::GetTime,
             lookup_by_key(_) => Expr::Unsupported("Expr::LookupByKey"),
             fetch_by_key(_) => Expr::Unsupported("Expr::FetchByKey"),
         }
@@ -784,10 +786,9 @@ impl Expr {
                 submitter: Self::boxed_from_proto(x.party, env),
                 update: Self::boxed_from_proto(x.expr, env),
             },
-            get_time(_) => Expr::Builtin(Builtin::GetTime),
-            pass(x) => Expr::App {
-                fun: Box::new(Expr::Builtin(Builtin::AdvanceTime)),
-                args: vec![Self::from_proto_unboxed(*x, env)],
+            get_time(_) => Expr::GetTime,
+            pass(x) => Expr::AdvanceTime {
+                delta: Box::new(Self::from_proto_unboxed(*x, env)),
             },
             get_party(x) => Expr::App {
                 fun: Box::new(Expr::Builtin(Builtin::GetParty)),

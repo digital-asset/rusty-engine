@@ -74,8 +74,6 @@ pub fn arity(builtin: Builtin) -> usize {
 
         TimeToMicrosSinceEpoch => 1,
         TimeFromMicrosSinceEpoch => 1,
-        GetTime => 0,
-        AdvanceTime => 1,
 
         EqualDate => 2,
         LeqDate => 2,
@@ -219,8 +217,6 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Result<Value<'
         TimeFromMicrosSinceEpoch => {
             Ok(Value::Time(Time::from_micros_since_epoch(args[0].as_i64())))
         }
-        GetTime => panic!("Builtin::GetTime is handled in step"),
-        AdvanceTime => panic!("Builtin::AdvanceTime is handled in step"),
 
         EqualDate => Ok(Value::Bool(args[0].as_date() == args[1].as_date())),
         LeqDate => Ok(Value::Bool(args[0].as_date() <= args[1].as_date())),

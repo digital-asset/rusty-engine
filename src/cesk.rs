@@ -23,6 +23,7 @@ pub enum Prim<'a> {
     ExerciseCall(&'a TypeConRef, &'a String),
     ExerciseExec(&'a TypeConRef, &'a String),
     Submit { should_succeed: bool },
+    AdvanceTime,
 }
 
 #[derive(Debug)]
@@ -260,6 +261,11 @@ impl<'a> State<'a> {
                 };
                 Ctrl::from_prim(prim, 2)
             }
+            Expr::GetTime => Ctrl::from_value(Value::Time(self.time)),
+            Expr::AdvanceTime { delta } => {
+                self.kont.push(Kont::Arg(delta));
+                Ctrl::from_prim(Prim::AdvanceTime, 1)
+            }
 
             Expr::Unsupported(msg) => panic!("Unsupported: {}", msg),
         }
@@ -275,15 +281,6 @@ impl<'a> State<'a> {
     ) -> Ctrl<'a> {
         match prim {
             Prim::Builtin(Builtin::TextToText) => Ctrl::Value(Rc::clone(&args[0])),
-            Prim::Builtin(Builtin::GetTime) => Ctrl::from_value(Value::Time(self.time)),
-            Prim::Builtin(Builtin::AdvanceTime) => {
-                let delta = args[0].as_i64();
-                let time = Time::from_micros_since_epoch(
-                    i64::checked_add(self.time.to_micros_since_epoch(), delta).unwrap(),
-                );
-                self.time = time;
-                Ctrl::from_value(Value::Time(time))
-            }
             // TODO(MH): There's plenty of room for optimizations in foldr
             // and foldl, but let's get something simple and correct first.
             Prim::Builtin(Builtin::Foldr) => {
@@ -508,6 +505,14 @@ impl<'a> State<'a> {
                         }
                     }
                 }
+            }
+            Prim::AdvanceTime => {
+                let delta = args[0].as_i64();
+                let time = Time::from_micros_since_epoch(
+                    i64::checked_add(self.time.to_micros_since_epoch(), delta).unwrap(),
+                );
+                self.time = time;
+                Ctrl::from_value(Value::Time(time))
             }
         }
     }
