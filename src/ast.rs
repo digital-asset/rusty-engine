@@ -217,6 +217,13 @@ pub enum Builtin {
     Some,
     Error,
 
+    // Map operations
+    MapInsert,
+    MapLookup,
+    MapDelete,
+    MapToList,
+    MapSize,
+
     Unsupported(daml_lf_1::BuiltinFunction),
 }
 
@@ -296,15 +303,17 @@ impl Builtin {
 
             ERROR => Error,
 
+            MAP_EMPTY => panic!("This is handled in Expr::from_proto"),
+            MAP_INSERT => MapInsert,
+            MAP_LOOKUP => MapLookup,
+            MAP_DELETE => MapDelete,
+            MAP_TO_LIST => MapToList,
+            MAP_SIZE => MapSize,
+
             // Decimal unsupported
             ADD_DECIMAL | SUB_DECIMAL | MUL_DECIMAL | DIV_DECIMAL | ROUND_DECIMAL
             | EQUAL_DECIMAL | LEQ_DECIMAL | LESS_DECIMAL | GEQ_DECIMAL | GREATER_DECIMAL
             | TO_TEXT_DECIMAL | FROM_TEXT_DECIMAL | INT64_TO_DECIMAL | DECIMAL_TO_INT64 => {
-                Unsupported(proto)
-            }
-
-            // Map unsupported
-            MAP_EMPTY | MAP_INSERT | MAP_LOOKUP | MAP_DELETE | MAP_TO_LIST | MAP_SIZE => {
                 Unsupported(proto)
             }
 
@@ -322,6 +331,7 @@ pub enum PrimLit {
     None,
     Int64(i64),
     Text(String),
+    MapEmpty,
     Unsupported(&'static str),
 }
 
@@ -512,6 +522,9 @@ impl Expr {
                 let module_ref = ModuleRef::from_proto(x.module, env);
                 let name = x.name.join(".");
                 Expr::Val { module_ref, name }
+            }
+            builtin(x) if x.unwrap() == daml_lf_1::BuiltinFunction::MAP_EMPTY => {
+                Expr::PrimLit(PrimLit::MapEmpty)
             }
             builtin(x) => Expr::Builtin(Builtin::from_proto(x.unwrap())),
             prim_con(x) => Expr::PrimLit(match x.unwrap() {
@@ -1071,6 +1084,7 @@ impl Package {
 pub struct World {
     pub main: PackageId,
     packages: FnvHashMap<PackageId, Package>,
+    pub map_entry_fields: Vec<String>,
 }
 
 impl World {
@@ -1107,7 +1121,12 @@ impl World {
             .into_iter()
             .map(|package| (package.id.clone(), package))
             .collect();
-        let world = World { main, packages };
+        let map_entry_fields = vec!["key".to_string(), "value".to_string()];
+        let world = World {
+            main,
+            packages,
+            map_entry_fields,
+        };
         Ok(world)
     }
 

@@ -1,6 +1,6 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-use fnv::FnvHashSet;
+use fnv::{FnvHashMap, FnvHashSet};
 use std::fmt;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -41,6 +41,7 @@ pub enum Value<'a> {
     Cons(Rc<Value<'a>>, Rc<Value<'a>>),
     None,
     Some(Rc<Value<'a>>),
+    Map(FnvHashMap<String, Rc<Value<'a>>>),
     Token, // The "real world" token for the `Update` monad.
     PAP(Builtin, Vec<Rc<Value<'a>>>, usize),
     Lam(&'a Expr, Env<'a>, Vec<Rc<Value<'a>>>, usize),
@@ -213,6 +214,13 @@ impl<'a> Value<'a> {
             Value::Cons(head, tail) => Some((Rc::clone(head), Rc::clone(tail))),
             _ => panic!("Expected List, found {:?}", self),
         })
+    }
+
+    pub fn as_map(&self) -> &FnvHashMap<String, Rc<Value<'a>>> {
+        match self {
+            Value::Map(map) => &map,
+            _ => panic!("Expected Map, found {:?}", self),
+        }
     }
 
     pub fn as_party_set(&self) -> FnvHashSet<Party> {

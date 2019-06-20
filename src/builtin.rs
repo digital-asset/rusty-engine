@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::rc::Rc;
 
-use crate::ast::Builtin;
+use crate::ast::*;
 use crate::value::*;
 
 mod i64_aux {
@@ -103,6 +103,12 @@ pub fn arity(builtin: Builtin) -> usize {
         Some => 1,
         Error => 1,
 
+        MapInsert => 3,
+        MapLookup => 2,
+        MapDelete => 2,
+        MapToList => 1,
+        MapSize => 1,
+
         Unsupported(x) => panic!("Builtin::Unsupported {:?}", x),
     }
 }
@@ -119,7 +125,11 @@ where
     }
 }
 
-pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Result<Value<'a>, String> {
+pub fn interpret<'a>(
+    builtin: Builtin,
+    args: &[Rc<Value<'a>>],
+    world: &'a World,
+) -> Result<Value<'a>, String> {
     use self::Builtin::*;
     assert!(
         args.len() == arity(builtin),
@@ -259,6 +269,36 @@ pub fn interpret<'a>(builtin: Builtin, args: &[Rc<Value<'a>>]) -> Result<Value<'
             Ok(Value::Some(body))
         }
         Error => Err(args[0].as_string().to_owned()),
+
+        MapInsert => {
+            let mut map = args[2].as_map().clone();
+            map.insert(args[0].as_string().clone(), Rc::clone(&args[1]));
+            Ok(Value::Map(map))
+        }
+        MapLookup => {
+            let map = args[1].as_map();
+            Ok(match map.get(args[0].as_string()) {
+                Option::None => Value::None,
+                Option::Some(v) => Value::Some(Rc::clone(v)),
+            })
+        }
+        MapDelete => {
+            let mut map = args[1].as_map().clone();
+            map.remove(args[0].as_string());
+            Ok(Value::Map(map))
+        }
+        MapToList => {
+            let mut vec: Vec<(String, Rc<Value<'a>>)> =
+                args[0].as_map().clone().into_iter().collect();
+            vec.sort_by(|x, y| x.0.cmp(&y.0));
+            Ok(Value::from_list(vec.into_iter().map(|(k, v)| {
+                Rc::new(Value::TupleCon(
+                    &world.map_entry_fields,
+                    vec![Rc::new(Value::Text(k)), v],
+                ))
+            })))
+        }
+        MapSize => Ok(Value::Int64(args[0].as_map().len() as i64)),
 
         Unsupported(x) => panic!("Builtin::Unsupported {:?}", x),
     }
