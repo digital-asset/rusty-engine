@@ -438,6 +438,14 @@ pub enum Expr {
         con: String,
         arg: Box<Expr>,
     },
+    TupleCon {
+        fields: Vec<String>,
+        exprs: Vec<Expr>,
+    },
+    TupleProj {
+        field: String,
+        tuple: Box<Expr>,
+    },
     App {
         fun: Box<Expr>,
         args: Vec<Expr>,
@@ -556,8 +564,22 @@ impl Expr {
                 let arg = Self::boxed_from_proto(x.variant_arg, env);
                 Expr::VariantCon { tycon, con, arg }
             }
-            tuple_con(_) => Expr::Unsupported("Expr::TupleCon"),
-            tuple_proj(_) => Expr::Unsupported("Expr::TupleProj"),
+            tuple_con(x) => {
+                let mut fields = Vec::new();
+                fields.reserve(x.fields.len());
+                let mut exprs = Vec::new();
+                exprs.reserve(x.fields.len());
+                for fx in x.fields.into_vec() {
+                    fields.push(fx.field);
+                    exprs.push(Self::from_proto(fx.expr, env));
+                }
+                Expr::TupleCon { fields, exprs }
+            }
+            tuple_proj(x) => {
+                let field = x.field;
+                let tuple = Self::boxed_from_proto(x.tuple, env);
+                Expr::TupleProj { field, tuple }
+            }
             app(x) => {
                 let fun = Self::boxed_from_proto(x.fun, env);
                 let args = x

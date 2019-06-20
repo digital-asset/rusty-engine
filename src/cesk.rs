@@ -16,6 +16,8 @@ pub enum Prim<'a> {
     RecProj(&'a TypeConRef, &'a String),
     RecUpd(&'a TypeConRef, &'a String),
     VariantCon(&'a TypeConRef, &'a String),
+    TupleCon(&'a Vec<String>),
+    TupleProj(&'a String),
     CreateCall(&'a DefTemplate),
     CreateCheckPrecondition(&'a DefTemplate),
     CreateExec(&'a DefTemplate),
@@ -232,6 +234,16 @@ impl<'a> State<'a> {
                 Ctrl::from_prim(Prim::VariantCon(tycon, con), 1)
             }
 
+            Expr::TupleCon { fields, exprs } => {
+                self.kont.extend(exprs.iter().rev().map(Kont::Arg));
+                Ctrl::from_prim(Prim::TupleCon(fields), exprs.len())
+            }
+
+            Expr::TupleProj { field, tuple } => {
+                self.kont.push(Kont::Arg(&tuple));
+                Ctrl::from_prim(Prim::TupleProj(field), 1)
+            }
+
             Expr::App { fun, args } => {
                 self.kont.extend(args.iter().rev().map(Kont::Arg));
                 Ctrl::Expr(fun)
@@ -389,6 +401,15 @@ impl<'a> State<'a> {
                     Ctrl::from_value(Value::RecCon(tycon, fields, vals))
                 } else {
                     panic!("RecUpd not on RecCon")
+                }
+            }
+            Prim::TupleCon(fields) => Ctrl::from_value(Value::TupleCon(fields, args.to_vec())),
+            Prim::TupleProj(field) => {
+                if let Value::TupleCon(fields, vals) = &*args[0] {
+                    let idx = fields.iter().position(|x| x == *field).unwrap();
+                    Ctrl::Value(Rc::clone(&vals[idx]))
+                } else {
+                    panic!("TupleProj not on TupleCon")
                 }
             }
             Prim::VariantCon(tycon, con) => {
