@@ -20,9 +20,9 @@ sha2 = "0.8.0"
 zip = "0.5.2"
 
 [dependencies.protobuf]
-git = "https://github.com/hurryabit/rust-protobuf"
-branch = "onoef-field-box"
+git = "https://github.com/stepancheg/rust-protobuf"
+rev = "76c8892a410fa7a3d74041332c20fb2b1a74f71f"
 
 [build-dependencies.protobuf-codegen-pure]
-git = "https://github.com/hurryabit/rust-protobuf"
-branch = "onoef-field-box"
+git = "https://github.com/stepancheg/rust-protobuf"
+rev = "76c8892a410fa7a3d74041332c20fb2b1a74f71f"

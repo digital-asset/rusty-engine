@@ -511,7 +511,7 @@ impl Expr {
                 CON_FALSE => PrimLit::Bool(false),
                 CON_TRUE => PrimLit::Bool(true),
             }),
-            prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(*x)),
+            prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(x)),
             rec_con(x) => {
                 let tycon = TypeConRef::from_proto(x.tycon.unwrap().tycon, env);
                 let mut fields = Vec::new();
@@ -643,7 +643,7 @@ impl Expr {
                     Expr::App { fun, args }
                 };
 
-                let body = Self::from_update_proto(*update_proto, apply_token, env);
+                let body = Self::from_update_proto(update_proto, apply_token, env);
 
                 env.pop(&param);
                 Expr::Lam {

@@ -30,7 +30,6 @@ fn main() {
         .include("protos")
         .customize(protobuf_codegen_pure::Customize {
             singular_field_option_box: Some(true),
-            oneof_field_box: Some(true),
             ..Default::default()
         })
         .run()
