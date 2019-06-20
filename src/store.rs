@@ -7,7 +7,7 @@ use std::rc::Rc;
 use crate::ast::*;
 use crate::value::*;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Contract<'a> {
     pub template_ref: &'a TypeConRef,
     pub payload: Rc<Value<'a>>,
@@ -19,7 +19,7 @@ pub struct Contract<'a> {
     pub witnesses: FnvHashSet<Party>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum Entry<'a> {
     Active(Contract<'a>),
     Archived,
@@ -77,22 +77,23 @@ impl<'a> Store<'a> {
         template_ref: &'a TypeConRef,
         contract_id: &ContractId,
     ) -> Result<&Contract<'a>, String> {
-        let entry_opt = match self.pending.get_mut(contract_id) {
-            Some(entry) => Some(entry),
-            None => self.committed.get_mut(contract_id),
-        };
-        match entry_opt {
-            None => Err(format!("unknown contract id: {}", contract_id)),
-            Some(entry) => {
-                let contract = entry.get_typechecked(template_ref, contract_id)?;
-                if contract.witnesses.contains(submitter) {
-                    contract.witnesses.extend(witnesses.iter().cloned());
-                    Ok(contract)
-                } else {
-                    Err(format!("undisclosed contract id: {}", contract_id))
+        if !self.pending.contains_key(contract_id) {
+            match self.committed.get(contract_id) {
+                Some(entry) => {
+                    self.pending.insert(contract_id.clone(), entry.clone());
+                }
+                None => {
+                    return Err(format!("unknown contract id: {}", contract_id));
                 }
             }
         }
+        let entry = self.pending.get_mut(contract_id).unwrap();
+        let contract = entry.get_typechecked(template_ref, contract_id)?;
+        if !contract.witnesses.contains(submitter) {
+            return Err(format!("undisclosed contract id: {}", contract_id));
+        }
+        contract.witnesses.extend(witnesses.iter().cloned());
+        Ok(contract)
     }
 
     pub fn archive(
