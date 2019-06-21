@@ -1,5 +1,5 @@
--- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates.
--- All rights reserved.
+-- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2
 
 -- Check that various ways to define data types work. We're mostly interested
 -- in the generated DAML-LF. Unfortunately, we don't have a way to test for

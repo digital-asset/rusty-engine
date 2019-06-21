@@ -1,5 +1,5 @@
--- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates.
--- All rights reserved.
+-- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2
 
 -- Test that rational positive literals smaller or equal 10^38 -1 after multiplying with 10^10 pass.
 

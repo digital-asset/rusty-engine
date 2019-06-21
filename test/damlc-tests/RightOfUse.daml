@@ -1,5 +1,5 @@
--- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates.
--- All rights reserved.
+-- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2
 
 -- @ERROR Scenario execution failed on commit at RightOfUse:56:5:
 daml 1.2
