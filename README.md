@@ -12,7 +12,7 @@ This is an experimental implementation of a [DAML](https://daml.com/) scenario r
 
 - It can only run scenarios and does not produce transaction trees.
 - The `Decimal` type is not supported at all.
-- The conversion between `Text` and code points uses [Unicode scala values](http://www.unicode.org/glossary/#unicode_scalar_value) rather than [Unicode code points](http://www.unicode.org/glossary/#code_point).
+- The conversion between `Text` and code points uses [Unicode scalar values](http://www.unicode.org/glossary/#unicode_scalar_value) rather than [Unicode code points](http://www.unicode.org/glossary/#code_point).
 - The performance of the `Map` type is atrocious.
 - The `trace` primitive is not supported.
 - There has been barely any performance tweaking.
