@@ -290,17 +290,12 @@ impl Builtin {
                 map.remove(args[0].as_string());
                 Ok(Value::Map(map))
             }
-            MapToList => {
-                let mut vec: Vec<(String, Rc<Value<'a>>)> =
-                    args[0].as_map().clone().into_iter().collect();
-                vec.sort_by(|x, y| x.0.cmp(&y.0));
-                Ok(Value::from_list(vec.into_iter().map(|(k, v)| {
-                    Rc::new(Value::TupleCon(
-                        &world.map_entry_fields,
-                        vec![Rc::new(Value::Text(k)), v],
-                    ))
-                })))
-            }
+            MapToList => Ok(Value::from_list(args[0].as_map().iter().map(|(k, v)| {
+                Rc::new(Value::TupleCon(
+                    &world.map_entry_fields,
+                    vec![Rc::new(Value::Text(k.to_string())), Rc::clone(v)],
+                ))
+            }))),
             MapSize => Ok(Value::Int64(args[0].as_map().len() as i64)),
 
             Unsupported(x) => panic!("Builtin::Unsupported {:?}", x),

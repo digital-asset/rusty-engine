@@ -1,6 +1,7 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-use fnv::{FnvHashMap, FnvHashSet};
+use fnv::FnvHashSet;
+use im_rc::OrdMap;
 use std::rc::Rc;
 
 use crate::ast::*;
@@ -195,7 +196,7 @@ impl<'a> State<'a> {
                     PrimLit::None => Value::None,
                     PrimLit::Int64(i) => Value::Int64(*i),
                     PrimLit::Text(s) => Value::Text(s.clone()),
-                    PrimLit::MapEmpty => Value::Map(FnvHashMap::default()),
+                    PrimLit::MapEmpty => Value::Map(OrdMap::new()),
                     PrimLit::Unsupported(msg) => panic!("PrimLit::Unsupported({})", msg),
                 };
                 Ctrl::from_value(val)
