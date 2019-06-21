@@ -4,7 +4,6 @@ use fnv::{FnvHashMap, FnvHashSet};
 use std::rc::Rc;
 
 use crate::ast::*;
-use crate::builtin::*;
 use crate::store::*;
 use crate::value::*;
 
@@ -185,7 +184,7 @@ impl<'a> State<'a> {
                 Ctrl::Expr(&def.expr)
             }
 
-            Expr::Builtin(opcode) => Ctrl::from_prim(Prim::Builtin(*opcode), arity(*opcode)),
+            Expr::Builtin(opcode) => Ctrl::from_prim(Prim::Builtin(*opcode), opcode.arity()),
 
             Expr::PrimLit(lit) => {
                 let val = match lit {
@@ -380,7 +379,7 @@ impl<'a> State<'a> {
                 Ctrl::from_value(Value::Bool(true))
             }
             Prim::Builtin(opcode) => Ctrl::catch(|| {
-                let value = interpret(*opcode, args, world)?;
+                let value = opcode.interpret(args, world)?;
                 Ok(Ctrl::from_value(value))
             }),
             Prim::RecCon(tycon, fields) => {
