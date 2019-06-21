@@ -62,6 +62,7 @@ enum Kont<'a> {
 #[derive(Debug)]
 struct UpdateMode {
     submitter: Party,
+    // NOTE(MH): The `authorizers` must be a subset of the `witnesses`.
     authorizers: FnvHashSet<Party>,
     witnesses: FnvHashSet<Party>,
 }
@@ -460,7 +461,6 @@ impl<'a> State<'a> {
                     ))
                 } else {
                     let mut witnesses = update_mode.witnesses.clone();
-                    witnesses.extend(signatories.iter().cloned());
                     witnesses.extend(observers.iter().cloned());
 
                     let contract_id = store.create(Contract {
