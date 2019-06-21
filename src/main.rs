@@ -26,6 +26,13 @@ fn make_entry_point(world: &World, module_name: String, scenario_name: String) -
 
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
+    if args.len() < 2 || args.len() > 4 {
+        println!(
+            "usage: {} <path-to-dar> [<module-name> [<scenario-name>]]",
+            &args[0]
+        );
+        std::process::exit(1);
+    }
     let filename = &args[1];
     let module_filter: Option<&String> = args.get(2);
     let scenario_filter: Option<&String> = args.get(3);
@@ -63,7 +70,8 @@ fn main() -> std::io::Result<()> {
         for test_name in failed_tests {
             println!("* {}", test_name);
         }
-        panic!("Some tests failed");
+        println!("Some tests failed");
+        std::process::exit(1);
     }
 
     println!("All tests passed");
