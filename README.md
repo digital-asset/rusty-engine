@@ -4,6 +4,16 @@
 Copyright 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 
+**This implementation is highly experimental and not supported by Digital Asset in any way.**
+
 # Prototype of a DAML Engine written in Rust
 
-**This implementation is highly experimental and not supported by Digital Asset in any way.**
+This is an experimental implementation of a [DAML](https://daml.com/) scenario runner written in [Rust](https://www.rust-lang.org/). It is not intended for production use and clearly not ready for it:
+
+- It can only run scenarios and does not produce transaction trees.
+- The `Decimal` type is not supported at all.
+- The conversion between `Text` and code points uses [Unicode scala values](http://www.unicode.org/glossary/#unicode_scalar_value) rather than [Unicode code points](http://www.unicode.org/glossary/#code_point).
+- The performance of the `Map` type is atrocious.
+- The `trace` primitive is not supported.
+- There has been barely any performance tweaking.
+- There has been no code review whatsoever.
