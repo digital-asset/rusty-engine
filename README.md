@@ -17,3 +17,20 @@ This is an experimental implementation of a [DAML](https://daml.com/) scenario r
 - The `trace` primitive is not supported.
 - There has been barely any performance tweaking.
 - There has been no code review whatsoever.
+
+# How to use this implementation
+
+This implementation is developed using Rust stable, which is at version 1.35.0 at the time of this writing.
+
+To run all scenarios in a `.dar` file, execute
+```
+$ cargo run <path-to-dar>
+```
+To run all scenario in a specific module in a `.dar` file, execute
+```
+$ cargo run <path-to-dar> <module-name>
+```
+To run a specific scenario in a `.dar` file, execute
+```
+$ cargo run <path-to-dar> <module-name> <scenario-name>
+```
