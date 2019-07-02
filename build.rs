@@ -24,23 +24,15 @@ fn main() {
     std::fs::create_dir_all(out_dir).expect("mkdir -p");
     extern crate protobuf_codegen_pure;
 
-    protobuf_codegen_pure::Args::new()
-        .out_dir(out_dir)
-        .inputs(inputs)
-        .include("protos")
-        .customize(protobuf_codegen_pure::Customize {
-            singular_field_option_box: Some(true),
+    protobuf_codegen_pure::run(protobuf_codegen_pure::Args {
+        out_dir,
+        input: inputs,
+        includes: &["protos"],
+        customize: protobuf_codegen_pure::Customize {
             ..Default::default()
-        })
-        .run()
-        .expect("protoc");
-
-    // NOTE(MH): Patch the generated Rust file to remedy an bug in the codegen
-    // until we have a fix.
-    sed_in_place(
-        "src/protos/da/daml_lf_1.rs",
-        "s/def_template::def_key::/def_key::/",
-    );
+        },
+    })
+    .expect("protoc");
 
     // NOTE(MH): The protobuf codegen produces `#[allow(clippy)]` pragmas,
     // which cause a clippy warning. Thus we need to patch it.
