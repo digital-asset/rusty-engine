@@ -24,16 +24,14 @@ fn main() {
     std::fs::create_dir_all(out_dir).expect("mkdir -p");
     extern crate protobuf_codegen_pure;
 
-    protobuf_codegen_pure::Args::new()
-        .out_dir(out_dir)
-        .inputs(inputs)
-        .include("protos")
-        .customize(protobuf_codegen_pure::Customize {
-            singular_field_option_box: Some(true),
-            ..Default::default()
-        })
-        .run()
-        .expect("protoc");
+    protobuf_codegen_pure::run(protobuf_codegen_pure::Args {
+        out_dir,
+        input: inputs,
+        includes: &["protos"],
+        customize: protobuf_codegen_pure::Customize {
+          ..Default::default()
+        },
+    }).expect("protoc");
 
     // NOTE(MH): Patch the generated Rust file to remedy an bug in the codegen
     // until we have a fix.
