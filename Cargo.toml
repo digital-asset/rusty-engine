@@ -8,8 +8,8 @@ edition = "2018"
 build = "build.rs"
 publish = false
 description = "Prototype of a DAML Engine written in Rust"
-homepage = "https://github.com/hurryabit/rusty-engine#readme"
-repository = "https://github.com/hurryabit/rusty-engine"
+homepage = "https://github.com/digital-asset/rusty-engine#readme"
+repository = "https://github.com/digital-asset/rusty-engine"
 readme = "README.md"
 license = "Apache-2.0"
 
