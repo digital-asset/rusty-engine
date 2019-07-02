@@ -27,7 +27,7 @@ To run all scenarios in a `.dar` file, execute
 ```
 $ cargo run <path-to-dar>
 ```
-To run all scenario in a specific module in a `.dar` file, execute
+To run all scenarios in a specific module in a `.dar` file, execute
 ```
 $ cargo run <path-to-dar> <module-name>
 ```
