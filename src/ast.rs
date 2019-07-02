@@ -1,6 +1,7 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 use fnv::FnvHashMap;
+use protobuf::SingularPtrField;
 use std::fmt;
 use std::io::*;
 
@@ -72,7 +73,7 @@ pub type Binder = String;
 
 pub type PackageId = String;
 
-pub fn dotted_name_from_proto(proto: Option<Box<daml_lf_1::DottedName>>) -> String {
+pub fn dotted_name_from_proto(proto: SingularPtrField<daml_lf_1::DottedName>) -> String {
     proto.unwrap().segments.into_vec().join(".")
 }
 
@@ -89,13 +90,13 @@ impl fmt::Display for ModuleRef {
 }
 
 impl ModuleRef {
-    fn from_proto(proto: Option<Box<daml_lf_1::ModuleRef>>, env: &Env) -> Self {
-        use daml_lf_1::package_ref::Sum;
+    fn from_proto(proto: SingularPtrField<daml_lf_1::ModuleRef>, env: &Env) -> Self {
+        use daml_lf_1::PackageRef_oneof_Sum;
         let proto = proto.unwrap();
         let package_ref = proto.package_ref.unwrap();
         let package_id = match package_ref.Sum.unwrap() {
-            Sum::field_self(_) => env.self_package_id.clone(),
-            Sum::package_id(id) => id,
+            PackageRef_oneof_Sum::field_self(_) => env.self_package_id.clone(),
+            PackageRef_oneof_Sum::package_id(id) => id,
         };
         let module_name = dotted_name_from_proto(proto.module_name);
         ModuleRef {
@@ -112,7 +113,7 @@ pub struct TypeConRef {
 }
 
 impl TypeConRef {
-    fn from_proto(proto: Option<Box<daml_lf_1::TypeConName>>, env: &Env) -> TypeConRef {
+    fn from_proto(proto: SingularPtrField<daml_lf_1::TypeConName>, env: &Env) -> TypeConRef {
         let proto = proto.unwrap();
         let module_ref = ModuleRef::from_proto(proto.module, env);
         let name = dotted_name_from_proto(proto.name);
@@ -337,7 +338,7 @@ pub enum PrimLit {
 
 impl PrimLit {
     fn from_proto(proto: daml_lf_1::PrimLit) -> PrimLit {
-        use daml_lf_1::prim_lit::Sum::*;
+        use daml_lf_1::PrimLit_oneof_Sum::*;
         match proto.Sum.unwrap() {
             int64(x) => PrimLit::Int64(x),
             decimal(_) => PrimLit::Unsupported("PrimLit::Decimal"),
@@ -362,13 +363,13 @@ pub enum Pat {
 }
 
 impl Pat {
-    fn from_proto(proto: daml_lf_1::case_alt::Sum) -> Self {
-        use daml_lf_1::case_alt::Sum::*;
+    fn from_proto(proto: daml_lf_1::CaseAlt_oneof_Sum) -> Self {
+        use daml_lf_1::CaseAlt_oneof_Sum::*;
         use daml_lf_1::PrimCon::*;
         match proto {
             default(_) => Pat::Default,
             variant(x) => Pat::Variant(x.variant, x.binder),
-            prim_con(x) => match x.unwrap() {
+            prim_con(x) => match x {
                 CON_UNIT => Pat::Unit,
                 CON_FALSE => Pat::Bool(false),
                 CON_TRUE => Pat::Bool(true),
@@ -501,16 +502,16 @@ pub enum Expr {
 }
 
 impl Expr {
-    fn from_proto(proto: Option<Box<daml_lf_1::Expr>>, env: &mut Env) -> Expr {
-        Self::from_proto_unboxed(*proto.unwrap(), env)
+    fn from_proto(proto: SingularPtrField<daml_lf_1::Expr>, env: &mut Env) -> Expr {
+        Self::from_proto_unboxed(proto.unwrap(), env)
     }
 
-    fn boxed_from_proto(proto: Option<Box<daml_lf_1::Expr>>, env: &mut Env) -> Box<Expr> {
+    fn boxed_from_proto(proto: SingularPtrField<daml_lf_1::Expr>, env: &mut Env) -> Box<Expr> {
         Box::new(Self::from_proto(proto, env))
     }
 
     fn from_proto_unboxed(proto: daml_lf_1::Expr, env: &mut Env) -> Expr {
-        use daml_lf_1::expr::Sum::*;
+        use daml_lf_1::Expr_oneof_Sum::*;
         use daml_lf_1::PrimCon::*;
         match proto.Sum.unwrap() {
             var(x) => {
@@ -523,11 +524,11 @@ impl Expr {
                 let name = x.name.join(".");
                 Expr::Val { module_ref, name }
             }
-            builtin(x) if x.unwrap() == daml_lf_1::BuiltinFunction::MAP_EMPTY => {
+            builtin(x) if x == daml_lf_1::BuiltinFunction::MAP_EMPTY => {
                 Expr::PrimLit(PrimLit::MapEmpty)
             }
-            builtin(x) => Expr::Builtin(Builtin::from_proto(x.unwrap())),
-            prim_con(x) => Expr::PrimLit(match x.unwrap() {
+            builtin(x) => Expr::Builtin(Builtin::from_proto(x)),
+            prim_con(x) => Expr::PrimLit(match x {
                 CON_UNIT => PrimLit::Unit,
                 CON_FALSE => PrimLit::Bool(false),
                 CON_TRUE => PrimLit::Bool(true),
@@ -715,7 +716,7 @@ impl Expr {
     where
         F: Fn(Expr) -> Expr,
     {
-        use daml_lf_1::update::Sum::*;
+        use daml_lf_1::Update_oneof_Sum::*;
         match proto.Sum.unwrap() {
             field_pure(x) => Self::from_proto(x.expr, env),
             block(x) => {
@@ -782,7 +783,7 @@ impl Expr {
     where
         F: Fn(Expr) -> Expr,
     {
-        use daml_lf_1::scenario::Sum::*;
+        use daml_lf_1::Scenario_oneof_Sum::*;
         match proto.Sum.unwrap() {
             field_pure(x) => Self::from_proto(x.expr, env),
             block(x) => {
@@ -1058,8 +1059,8 @@ impl Package {
         let payload: daml_lf::ArchivePayload = protobuf::parse_from_bytes(&proto.payload).unwrap();
         let id = proto.hash;
         let modules = match payload.Sum.unwrap() {
-            daml_lf::archive_payload::Sum::daml_lf_0(_) => panic!("DAML-LF 0.x not supported"),
-            daml_lf::archive_payload::Sum::daml_lf_1(payload_proto) => {
+            daml_lf::ArchivePayload_oneof_Sum::daml_lf_0(_) => panic!("DAML-LF 0.x not supported"),
+            daml_lf::ArchivePayload_oneof_Sum::daml_lf_1(payload_proto) => {
                 let mut env = Env::new(id.clone());
                 payload_proto
                     .modules

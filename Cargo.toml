@@ -16,13 +16,9 @@ license = "Apache-2.0"
 [dependencies]
 fnv = "1.0.6"
 hex = "0.3.2"
+protobuf = "2.7.0"
 sha2 = "0.8.0"
 zip = "0.5.2"
 
-[dependencies.protobuf]
-git = "https://github.com/stepancheg/rust-protobuf"
-rev = "76c8892a410fa7a3d74041332c20fb2b1a74f71f"
-
-[build-dependencies.protobuf-codegen-pure]
-git = "https://github.com/stepancheg/rust-protobuf"
-rev = "76c8892a410fa7a3d74041332c20fb2b1a74f71f"
+[build-dependencies]
+protobuf-codegen-pure = "2.7.0"
