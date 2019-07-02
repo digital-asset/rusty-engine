@@ -14,7 +14,15 @@ jobs:
       - restore_cache:
           name: Restore Rust cache
           keys:
-              - rust-v0-{{ arch }}-{{ checksum "Cargo.lock" }}
+              - rust-v0-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum ".circleci/config.yml" }}
+      - run:
+          name: Audit and licensing
+          command: |
+              # These install commands might fail because the binaries are cached.
+              cargo install cargo-audit || true
+              cargo install cargo-license || true
+              cargo audit
+              cargo license
       - run:
           name: Build
           command: cargo build --all --all-targets
@@ -31,7 +39,9 @@ jobs:
           name: Save Rust cache
           paths:
               - /usr/local/cargo/registry
+              - /usr/local/cargo/bin/cargo-audit
+              - /usr/local/cargo/bin/cargo-license
               - target/debug/.fingerprint
               - target/debug/build
               - target/debug/deps
-          key: rust-v0-{{ arch }}-{{ checksum "Cargo.lock" }}
+          key: rust-v0-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum ".circleci/config.yml" }}
