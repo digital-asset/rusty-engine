@@ -18,11 +18,12 @@ jobs:
       - run:
           name: Audit and licensing
           command: |
+              set -ux
               # These install commands might fail because the binaries are cached.
               cargo install cargo-audit || true
               cargo install cargo-license || true
               cargo audit
-              cargo license
+              diff <(cargo license --do-not-bundle | sed 's/\x1b\[[0-9;]*m//g' | LC_ALL=C sort) NOTICES
       - run:
           name: Build
           command: cargo build --all --all-targets
