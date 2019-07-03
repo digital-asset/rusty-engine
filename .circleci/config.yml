@@ -22,7 +22,7 @@ jobs:
               cargo install cargo-audit || true
               cargo install cargo-license || true
               cargo audit
-              cargo license
+              diff <(cargo license --do-not-bundle | sort) NOTICES
       - run:
           name: Build
           command: cargo build --all --all-targets
