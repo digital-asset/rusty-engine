@@ -26,7 +26,7 @@ jobs:
               diff <(cargo license --do-not-bundle | sed 's/\x1b\[[0-9;]*m//g' | LC_ALL=C sort) NOTICES
       - run:
           name: Build
-          command: cargo build --all --all-targets
+          command: cargo build --all --all-targets --locked
       - run:
           name: Style check
           command: cargo fmt --all -- --check
@@ -35,7 +35,7 @@ jobs:
           command: cargo clippy --all --all-targets -- --deny warnings
       - run:
           name: Test
-          command: cargo test --all --all-targets
+          command: cargo test --all --all-targets --locked
       - save_cache:
           name: Save Rust cache
           paths:
