@@ -16,6 +16,7 @@ license = "Apache-2.0"
 [dependencies]
 fnv = "1.0.6"
 hex = "0.3.2"
+libflate = ">= 0.1.25"
 protobuf = "2.8.0"
 sha2 = "0.8.0"
 zip = "0.5.2"
