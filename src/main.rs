@@ -86,10 +86,10 @@ mod tests {
     use super::*;
     use fnv::FnvHashMap;
 
-    fn dar_test(
-        path: &str,
-        expected_failures: &FnvHashMap<(&str, &str), (&str, Option<Vec<(i32, i32)>>)>,
-    ) {
+    type ExpectedFailures =
+        FnvHashMap<(&'static str, &'static str), (&'static str, Option<Vec<(i32, i32)>>)>;
+
+    fn dar_test(path: &str, expected_failures: &ExpectedFailures) {
         let world = World::load(path).unwrap();
         let main_package = world.main_package();
 
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn damlc_tests() {
-        let expected_failures: FnvHashMap<(&str, &str), (&str, Option<Vec<(i32, i32)>>)> = [
+        let expected_failures: ExpectedFailures = [
             (("BadCodePoint", "test"), ("invalid code point", None)),
             (
                 ("EnumFromThenTo", "main"),
