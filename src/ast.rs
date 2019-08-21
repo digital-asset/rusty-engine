@@ -91,8 +91,11 @@ impl fmt::Display for ModuleRef {
 
 impl ModuleRef {
     fn from_proto(proto: SingularPtrField<daml_lf_1::ModuleRef>, env: &Env) -> Self {
+        Self::from_proto_unboxed(proto.unwrap(), env)
+    }
+
+    fn from_proto_unboxed(proto: daml_lf_1::ModuleRef, env: &Env) -> Self {
         use daml_lf_1::PackageRef_oneof_Sum;
-        let proto = proto.unwrap();
         let package_ref = proto.package_ref.unwrap();
         let package_id = match package_ref.Sum.unwrap() {
             PackageRef_oneof_Sum::field_self(_) => env.self_package_id.clone(),
@@ -103,6 +106,47 @@ impl ModuleRef {
             package_id,
             module_name,
         }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct Location {
+    pub module: Option<ModuleRef>,
+    pub start_line: i32,
+    pub start_col: i32,
+    pub end_line: i32,
+    pub end_col: i32,
+}
+
+impl fmt::Display for Location {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let range = format!(
+            "{}:{}-{}:{}",
+            self.start_line, self.start_col, self.end_line, self.end_col
+        );
+        match &self.module {
+            None => write!(f, "{}", range),
+            Some(module) => write!(f, "{}:{}", module, range),
+        }
+    }
+}
+
+impl Location {
+    fn from_proto(proto: SingularPtrField<daml_lf_1::Location>, env: &Env) -> Option<Self> {
+        proto.into_option().map(|proto| {
+            let module = proto
+                .module
+                .into_option()
+                .map(|module| ModuleRef::from_proto_unboxed(module, env));
+            let range = proto.range.unwrap();
+            Location {
+                module,
+                start_line: range.start_line,
+                start_col: range.start_col,
+                end_line: range.end_line,
+                end_col: range.end_col,
+            }
+        })
     }
 }
 
@@ -497,6 +541,10 @@ pub enum Expr {
     AdvanceTime {
         delta: Box<Expr>,
     },
+    Located {
+        location: Location,
+        expr: Box<Expr>,
+    },
 
     Unsupported(&'static str),
 }
@@ -510,10 +558,11 @@ impl Expr {
         Box::new(Self::from_proto(proto, env))
     }
 
-    fn from_proto_unboxed(proto: daml_lf_1::Expr, env: &mut Env) -> Expr {
+    fn from_proto_unboxed(mut proto: daml_lf_1::Expr, env: &mut Env) -> Expr {
         use daml_lf_1::Expr_oneof_Sum::*;
         use daml_lf_1::PrimCon::*;
-        match proto.Sum.unwrap() {
+
+        let expr = match proto.Sum.unwrap() {
             var(x) => {
                 let index = env.get(&x);
                 let name = x;
@@ -681,6 +730,17 @@ impl Expr {
 
                 let body = Self::from_update_proto(update_proto, apply_token, env);
 
+                // NOTE(MH): We need to put the location annotation inside
+                // the lambda for the token to produce useful stack traces.
+                let proto_location =
+                    std::mem::replace(&mut proto.location, SingularPtrField::none());
+                let body = if let Some(location) = Location::from_proto(proto_location, env) {
+                    let expr = Box::new(body);
+                    Expr::Located { location, expr }
+                } else {
+                    body
+                };
+
                 env.pop(&param);
                 Expr::Lam {
                     params: vec![param],
@@ -702,6 +762,17 @@ impl Expr {
 
                 let body = Self::from_scenario_proto(*scenario_proto, apply_token, env);
 
+                // NOTE(MH): We need to put the location annotation inside
+                // the lambda for the token to produce useful stack traces.
+                let proto_location =
+                    std::mem::replace(&mut proto.location, SingularPtrField::none());
+                let body = if let Some(location) = Location::from_proto(proto_location, env) {
+                    let expr = Box::new(body);
+                    Expr::Located { location, expr }
+                } else {
+                    body
+                };
+
                 env.pop(&param);
                 Expr::Lam {
                     params: vec![param],
@@ -709,6 +780,13 @@ impl Expr {
                 }
             }
             tuple_upd(_) => Expr::Unsupported("Expr::TupleUpd"),
+        };
+
+        if let Some(location) = Location::from_proto(proto.location, env) {
+            let expr = Box::new(expr);
+            Expr::Located { location, expr }
+        } else {
+            expr
         }
     }
 
@@ -907,6 +985,7 @@ impl Expr {
 #[derive(Debug)]
 pub struct DefValue {
     pub name: String,
+    pub location: Option<Location>,
     pub expr: Expr,
     pub is_test: bool,
 }
@@ -914,10 +993,12 @@ pub struct DefValue {
 impl DefValue {
     fn from_proto(proto: daml_lf_1::DefValue, env: &mut Env) -> Self {
         let name = proto.name_with_type.unwrap().name.join(".");
+        let location = Location::from_proto(proto.location, env);
         let expr = Expr::from_proto(proto.expr, env);
         let is_test = proto.is_test;
         DefValue {
             name,
+            location,
             expr,
             is_test,
         }
@@ -927,6 +1008,7 @@ impl DefValue {
 #[derive(Debug)]
 pub struct Choice {
     pub name: String,
+    pub location: Option<Location>,
     pub template_ref: TypeConRef,
     pub consuming: bool,
     pub self_binder: Binder,
@@ -942,6 +1024,7 @@ impl Choice {
         env: &mut Env,
     ) -> Self {
         let name = proto.name;
+        let location = Location::from_proto(proto.location, env);
         let template_ref = template_ref.clone();
         let consuming = proto.consuming;
         let self_binder = proto.self_binder;
@@ -954,6 +1037,7 @@ impl Choice {
         env.pop_many(&[&self_binder, &arg_binder]);
         Choice {
             name,
+            location,
             template_ref,
             consuming,
             self_binder,
@@ -967,6 +1051,7 @@ impl Choice {
 #[derive(Debug)]
 pub struct DefTemplate {
     pub name: String,
+    pub location: Option<Location>,
     pub self_ref: TypeConRef,
     pub this_binder: Binder,
     pub precondtion: Expr,
@@ -978,6 +1063,7 @@ pub struct DefTemplate {
 impl DefTemplate {
     fn from_proto(proto: daml_lf_1::DefTemplate, module_ref: &ModuleRef, env: &mut Env) -> Self {
         let name = dotted_name_from_proto(proto.tycon);
+        let location = Location::from_proto(proto.location, env);
         let self_ref = TypeConRef {
             module_ref: module_ref.clone(),
             name: name.clone(),
@@ -998,6 +1084,7 @@ impl DefTemplate {
         env.pop(&this_binder);
         DefTemplate {
             name,
+            location,
             self_ref,
             this_binder,
             precondtion,
