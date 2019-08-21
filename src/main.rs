@@ -58,10 +58,13 @@ fn main() -> std::io::Result<()> {
             let result = state.run(&world, &mut store);
             let duration = start.elapsed();
 
-            if result.is_err() {
-                failed_tests.push(test_name);
+            match result {
+                Ok(val) => println!("Result: {:?}\nTime:   {:?}", val, duration),
+                Err(err) => {
+                    failed_tests.push(test_name);
+                    println!("Failed: {}", err)
+                }
             }
-            println!("Result: {:?}\nTime:   {:?}", result, duration);
         }
     }
 
@@ -83,7 +86,10 @@ mod tests {
     use super::*;
     use fnv::FnvHashMap;
 
-    fn dar_test(path: &str, expected_failures: &FnvHashMap<(&str, &str), &str>) {
+    fn dar_test(
+        path: &str,
+        expected_failures: &FnvHashMap<(&str, &str), (&str, Option<Vec<(i32, i32)>>)>,
+    ) {
         let world = World::load(path).unwrap();
         let main_package = world.main_package();
 
@@ -100,13 +106,25 @@ mod tests {
                 match (result, expected_failure) {
                     (Ok(_), None) => (),
                     (Ok(_), Some(_)) => panic!("unexpected success in {}", test_name),
-                    (Err(msg), None) => panic!("unexpected failure in {}: {}", test_name, msg),
-                    (Err(msg), Some(pattern)) => {
-                        if !msg.contains(pattern) {
+                    (Err(err), None) => panic!("unexpected failure in {}: {}", test_name, err),
+                    (Err(ref err), Some((pattern, stack_trace))) => {
+                        if !err.message.contains(pattern) {
                             panic!(
-                                "expected failure for unexpected reason in {}: {}",
-                                test_name, msg
+                                "expected failure for unexpected reason in {}: {:?}",
+                                test_name, err
                             )
+                        } else if let Some(stack_trace) = stack_trace {
+                            let err_stack_trace: Vec<(i32, i32)> = err
+                                .stack_trace
+                                .iter()
+                                .map(|loc| (loc.start_line, loc.start_col))
+                                .collect();
+                            if err_stack_trace != *stack_trace {
+                                panic!(
+                                    "expected failure at unexpected location in {}: {:?}",
+                                    test_name, err
+                                )
+                            }
                         }
                     }
                 }
@@ -116,22 +134,34 @@ mod tests {
 
     #[test]
     fn damlc_tests() {
-        let expected_failures: FnvHashMap<(&str, &str), &str> = [
-            (("BadCodePoint", "test"), "invalid code point"),
-            (("EnumFromThenTo", "main"), "enumFromThenTo: from == then"),
-            (("GetPartyError", "main"), "Invalid party name:"),
-            (("HelloWorld", "main"), "Hello World!"),
-            (("Lazy", "main"), "Hello World!"),
-            (("PatError", "main"), "Non-exhaustive patterns in case"),
-            (("PolymorphicTest", "main"), "boom"),
-            (("Precondition", "test"), "Template pre-condition violated"),
+        let expected_failures: FnvHashMap<(&str, &str), (&str, Option<Vec<(i32, i32)>>)> = [
+            (("BadCodePoint", "test"), ("invalid code point", None)),
+            (
+                ("EnumFromThenTo", "main"),
+                ("enumFromThenTo: from == then", None),
+            ),
+            (("GetPartyError", "main"), ("Invalid party name:", None)),
+            (("HelloWorld", "main"), ("Hello World!", None)),
+            (("Lazy", "main"), ("Hello World!", None)),
+            (
+                ("PatError", "main"),
+                ("Non-exhaustive patterns in case", None),
+            ),
+            (("PolymorphicTest", "main"), ("boom", None)),
+            (
+                ("Precondition", "test"),
+                (
+                    "Template pre-condition violated",
+                    Some(vec![(21, 16), (23, 2)]),
+                ),
+            ),
             (
                 ("Records", "main"),
-                "B's Company is run by B and they are 3 years old",
+                ("B's Company is run by B and they are 3 years old", None),
             ),
-            (("RightOfUse", "example"), "authorization missing"),
-            (("Unicode", "main"), "⛄ ¯\\_(ツ)_/¯"),
-            (("UnusedLet", "main"), "BOOM"),
+            (("RightOfUse", "example"), ("authorization missing", None)),
+            (("Unicode", "main"), ("⛄ ¯\\_(ツ)_/¯", None)),
+            (("UnusedLet", "main"), ("BOOM", None)),
         ]
         .iter()
         .cloned()
