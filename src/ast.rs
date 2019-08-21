@@ -558,10 +558,11 @@ impl Expr {
         Box::new(Self::from_proto(proto, env))
     }
 
-    fn from_proto_unboxed(mut proto: daml_lf_1::Expr, env: &mut Env) -> Expr {
+    fn from_proto_unboxed(proto: daml_lf_1::Expr, env: &mut Env) -> Expr {
         use daml_lf_1::Expr_oneof_Sum::*;
         use daml_lf_1::PrimCon::*;
 
+        let mut opt_location: Option<Location> = Location::from_proto(proto.location, env);
         let expr = match proto.Sum.unwrap() {
             var(x) => {
                 let index = env.get(&x);
@@ -732,9 +733,7 @@ impl Expr {
 
                 // NOTE(MH): We need to put the location annotation inside
                 // the lambda for the token to produce useful stack traces.
-                let proto_location =
-                    std::mem::replace(&mut proto.location, SingularPtrField::none());
-                let body = if let Some(location) = Location::from_proto(proto_location, env) {
+                let body = if let Some(location) = opt_location.take() {
                     let expr = Box::new(body);
                     Expr::Located { location, expr }
                 } else {
@@ -764,9 +763,7 @@ impl Expr {
 
                 // NOTE(MH): We need to put the location annotation inside
                 // the lambda for the token to produce useful stack traces.
-                let proto_location =
-                    std::mem::replace(&mut proto.location, SingularPtrField::none());
-                let body = if let Some(location) = Location::from_proto(proto_location, env) {
+                let body = if let Some(location) = opt_location.take() {
                     let expr = Box::new(body);
                     Expr::Located { location, expr }
                 } else {
@@ -782,7 +779,7 @@ impl Expr {
             tuple_upd(_) => Expr::Unsupported("Expr::TupleUpd"),
         };
 
-        if let Some(location) = Location::from_proto(proto.location, env) {
+        if let Some(location) = opt_location {
             let expr = Box::new(expr);
             Expr::Located { location, expr }
         } else {
