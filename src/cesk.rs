@@ -1,11 +1,28 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 use fnv::{FnvHashMap, FnvHashSet};
+use std::fmt;
 use std::rc::Rc;
 
 use crate::ast::*;
 use crate::store::*;
 use crate::value::*;
+
+#[derive(Debug)]
+pub struct Error<'a> {
+    pub message: String,
+    pub stack_trace: Vec<&'a Location>,
+}
+
+impl<'a> fmt::Display for Error<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}\nStack trace:", self.message)?;
+        for location in self.stack_trace.iter().rev() {
+            write!(f, "\n- {}", location)?;
+        }
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 pub enum Prim<'a> {
@@ -57,6 +74,7 @@ enum Kont<'a> {
     Match(&'a Vec<Alt>),
     Let(&'a Binder, &'a Expr),
     EqualList(Rc<Value<'a>>, ValueListIter<'a>, ValueListIter<'a>),
+    Location(&'a Location),
 }
 
 #[derive(Debug)]
@@ -311,6 +329,11 @@ impl<'a> State<'a> {
             Expr::AdvanceTime { delta } => {
                 self.kont.push(Kont::Arg(delta));
                 Ctrl::from_prim(Prim::AdvanceTime, 1)
+            }
+
+            Expr::Located { location, expr } => {
+                self.kont.push(Kont::Location(location));
+                Ctrl::Expr(expr)
             }
 
             Expr::Unsupported(msg) => panic!("Unsupported: {}", msg),
@@ -595,9 +618,9 @@ impl<'a> State<'a> {
                             Ctrl::Error(String::from("unexpected success"))
                         }
                     }
-                    Err(msg) => {
+                    Err(err) => {
                         if *should_succeed {
-                            Ctrl::Error(msg)
+                            Ctrl::Error(err.message)
                         } else {
                             store.rollback();
                             Ctrl::from_value(Value::Unit)
@@ -713,6 +736,7 @@ impl<'a> State<'a> {
                     Ctrl::from_value(Value::Bool(false))
                 }
             }
+            Kont::Location(_location) => ctrl,
         }
     }
 
@@ -760,15 +784,32 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn get_result(self) -> Result<Rc<Value<'a>>, String> {
+    pub fn get_result(self) -> Result<Rc<Value<'a>>, Error<'a>> {
         match self.ctrl {
             Ctrl::Value(v) => Ok(v),
-            Ctrl::Error(msg) => Err(msg),
+            Ctrl::Error(message) => {
+                let stack_trace = self
+                    .kont
+                    .iter()
+                    .filter_map(|kont| match kont {
+                        Kont::Location(location) => Some(*location),
+                        _ => None,
+                    })
+                    .collect();
+                Err(Error {
+                    message,
+                    stack_trace,
+                })
+            }
             _ => panic!("IMPOSSIBLE: final control is always a value"),
         }
     }
 
-    pub fn run(mut self, world: &'a World, store: &mut Store<'a>) -> Result<Rc<Value<'a>>, String> {
+    pub fn run(
+        mut self,
+        world: &'a World,
+        store: &mut Store<'a>,
+    ) -> Result<Rc<Value<'a>>, Error<'a>> {
         while !self.is_final() {
             self.step(&world, store);
         }
