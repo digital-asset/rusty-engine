@@ -3,5 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euxo pipefail
 
-(cd bond-trading; daml build --output=../bond-trading.dar)
-(cd damlc-tests; daml build --output=../damlc-tests.dar)
+DAMLS="bond-trading collect-authority damlc-tests"
+
+for DAML in $DAMLS; do
+  (cd $DAML; daml build --output=../$DAML.dar)
+done

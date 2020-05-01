@@ -119,4 +119,14 @@ impl<'a> Store<'a> {
         self.pending.clear();
         self.next_pending_contract_id = self.next_committed_contract_id;
     }
+
+    pub fn stats(&self) -> (usize, usize) {
+        let archived = self
+            .committed
+            .iter()
+            .filter(|(_, v)| matches!(v, Entry::Archived))
+            .count();
+        let active = self.committed.len() - archived;
+        (active, archived)
+    }
 }
