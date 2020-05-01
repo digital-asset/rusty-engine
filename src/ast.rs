@@ -84,7 +84,7 @@ mod debruijn {
     }
 }
 
-use self::debruijn::Env;
+use debruijn::Env;
 
 pub type Binder = String;
 
@@ -113,19 +113,18 @@ impl ModuleRef {
     }
 
     fn from_proto_unboxed(proto: daml_lf_1::ModuleRef, env: &Env) -> Self {
-        use daml_lf_1::ModuleRef_oneof_module_name;
-        use daml_lf_1::PackageRef_oneof_Sum;
-        let package_ref = proto.package_ref.unwrap();
-        let package_id = match package_ref.Sum.unwrap() {
-            PackageRef_oneof_Sum::field_self(_) => env.self_package_id.clone(),
-            PackageRef_oneof_Sum::package_id_str(pkg_id) => pkg_id,
-            PackageRef_oneof_Sum::package_id_interned_str(id) => env.get_interned_string(id),
+        use daml_lf_1::ModuleRef_oneof_module_name::*;
+        use daml_lf_1::PackageRef_oneof_Sum::*;
+        let package_id = match proto.package_ref.unwrap().Sum.unwrap() {
+            field_self(_) => env.self_package_id.clone(),
+            package_id_str(pkg_id) => pkg_id,
+            package_id_interned_str(id) => env.get_interned_string(id),
         };
         let module_name = match proto.module_name.unwrap() {
-            ModuleRef_oneof_module_name::module_name_dname(dotted_name) => {
+            module_name_dname(dotted_name) => {
                 dotted_name_from_proto(dotted_name)
             }
-            daml_lf_1::ModuleRef_oneof_module_name::module_name_interned_dname(id) => {
+            module_name_interned_dname(id) => {
                 env.get_interned_dotted_name(id)
             }
         };
@@ -185,12 +184,12 @@ pub struct TypeConRef {
 
 impl TypeConRef {
     fn from_proto(proto: SingularPtrField<daml_lf_1::TypeConName>, env: &Env) -> TypeConRef {
-        use daml_lf_1::TypeConName_oneof_name;
+        use daml_lf_1::TypeConName_oneof_name::*;
         let proto = proto.unwrap();
         let module_ref = ModuleRef::from_proto(proto.module, env);
         let name = match proto.name.unwrap() {
-            TypeConName_oneof_name::name_dname(dotted_name) => dotted_name_from_proto(dotted_name),
-            TypeConName_oneof_name::name_interned_dname(id) => env.get_interned_dotted_name(id),
+            name_dname(dotted_name) => dotted_name_from_proto(dotted_name),
+            name_interned_dname(id) => env.get_interned_dotted_name(id),
         };
         TypeConRef { module_ref, name }
     }
@@ -449,17 +448,13 @@ pub enum Pat {
 
 impl Pat {
     fn from_proto(proto: daml_lf_1::CaseAlt_oneof_Sum, env: &Env) -> Self {
-        use daml_lf_1::CaseAlt_Cons_oneof_var_head::*;
-        use daml_lf_1::CaseAlt_Cons_oneof_var_tail::*;
-        use daml_lf_1::CaseAlt_OptionalSome_oneof_var_body::*;
-        use daml_lf_1::CaseAlt_Variant_oneof_binder::*;
-        use daml_lf_1::CaseAlt_Variant_oneof_variant::*;
         use daml_lf_1::CaseAlt_oneof_Sum::*;
-        use daml_lf_1::PrimCon::*;
         match proto {
             default(_) => Pat::Default,
             variant(x) => {
-                let v = match x.variant.unwrap() {
+                use daml_lf_1::CaseAlt_Variant_oneof_binder::*;
+                use daml_lf_1::CaseAlt_Variant_oneof_variant::*;
+                        let v = match x.variant.unwrap() {
                     variant_str(name) => name,
                     variant_interned_str(id) => env.get_interned_string(id),
                 };
@@ -477,13 +472,18 @@ impl Pat {
                 };
                 Pat::Enum(con)
             }
-            prim_con(x) => match x {
-                CON_UNIT => Pat::Unit,
-                CON_FALSE => Pat::Bool(false),
-                CON_TRUE => Pat::Bool(true),
+            prim_con(x) => {
+                use daml_lf_1::PrimCon::*;
+                match x {
+                    CON_UNIT => Pat::Unit,
+                    CON_FALSE => Pat::Bool(false),
+                    CON_TRUE => Pat::Bool(true),
+                }
             },
             nil(_) => Pat::Nil,
             cons(x) => {
+                use daml_lf_1::CaseAlt_Cons_oneof_var_head::*;
+                use daml_lf_1::CaseAlt_Cons_oneof_var_tail::*;
                 let h = match x.var_head.unwrap() {
                     var_head_str(name) => name,
                     var_head_interned_str(id) => env.get_interned_string(id),
@@ -496,6 +496,7 @@ impl Pat {
             }
             optional_none(_) => Pat::None,
             optional_some(x) => {
+                use daml_lf_1::CaseAlt_OptionalSome_oneof_var_body::*;
                 let b = match x.var_body.unwrap() {
                     var_body_str(name) => name,
                     var_body_interned_str(id) => env.get_interned_string(id),
@@ -644,7 +645,6 @@ impl Expr {
 
     fn from_proto_unboxed(proto: daml_lf_1::Expr, env: &mut Env) -> Expr {
         use daml_lf_1::Expr_oneof_Sum::*;
-        use daml_lf_1::PrimCon::*;
 
         let mut opt_location: Option<Location> = Location::from_proto(proto.location, env);
         let expr = match proto.Sum.unwrap() {
@@ -668,15 +668,18 @@ impl Expr {
                 };
                 Expr::Val { module_ref, name }
             }
-            builtin(x) if x == daml_lf_1::BuiltinFunction::TEXTMAP_EMPTY => {
+            builtin(daml_lf_1::BuiltinFunction::TEXTMAP_EMPTY) => {
                 Expr::PrimLit(PrimLit::MapEmpty)
             }
             builtin(x) => Expr::Builtin(Builtin::from_proto(x)),
-            prim_con(x) => Expr::PrimLit(match x {
-                CON_UNIT => PrimLit::Unit,
-                CON_FALSE => PrimLit::Bool(false),
-                CON_TRUE => PrimLit::Bool(true),
-            }),
+            prim_con(x) => {
+                use daml_lf_1::PrimCon::*;
+                Expr::PrimLit(match x {
+                    CON_UNIT => PrimLit::Unit,
+                    CON_FALSE => PrimLit::Bool(false),
+                    CON_TRUE => PrimLit::Bool(true),
+                })
+            }
             prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(x, env)),
             rec_con(x) => {
                 use daml_lf_1::FieldWithExpr_oneof_field::*;
@@ -1277,12 +1280,11 @@ pub struct Module {
 
 impl Module {
     fn from_proto(proto: daml_lf_1::Module, package_id: &str, env: &mut Env) -> Self {
-        use daml_lf_1::Module_oneof_name;
+        use daml_lf_1::Module_oneof_name::*;
         let name = match proto.name.unwrap() {
-            Module_oneof_name::name_dname(dotted_name) => dotted_name_from_proto(dotted_name),
-            Module_oneof_name::name_interned_dname(id) => env.get_interned_dotted_name(id),
+            name_dname(dotted_name) => dotted_name_from_proto(dotted_name),
+            name_interned_dname(id) => env.get_interned_dotted_name(id),
         };
-
         let self_ref = ModuleRef {
             package_id: package_id.to_string(),
             module_name: name.clone(),
