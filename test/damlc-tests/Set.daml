@@ -10,11 +10,10 @@ import DA.Assert
 
 testEmpty = scenario do
   0 === size S.empty
-  -- NOTE(MH): Avoid Decimal.
-  [] === toList (S.empty : Set Int)
+  [] === toList (S.empty : Set Decimal)
 
 testSize = scenario do
-  0 === size (fromList ([] : [Int]))
+  0 === size (fromList ([] : [Decimal]))
   3 === size (fromList [1, 2, 3])
 
 testToList = scenario do

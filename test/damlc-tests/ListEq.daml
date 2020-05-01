@@ -8,6 +8,5 @@ main = scenario do
   alice <- getParty "alice"
   submit alice do
     assert $ [1] == [1]
-    -- NOTE(MH): Avoid Decimal.
-    assert $ [1] /= [2]
+    assert $ [1.0] /= ([2.0] : [Decimal])
     assert $ [""] /= []
