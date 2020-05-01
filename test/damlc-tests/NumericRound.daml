@@ -4,7 +4,7 @@ module NumericRound where
 
 import DA.Assert
 
--- FIXME(MH): Support Numeric.
+-- FIXME(MH): Support NUMERIC_ROUND primitive.
 -- testRound : Scenario ()
 -- testRound = scenario do
 --     roundCommercial 0 10.5 === (11.0 : Numeric 10)

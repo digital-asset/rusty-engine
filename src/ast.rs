@@ -3,6 +3,7 @@
 use bigdecimal::BigDecimal;
 use fnv::FnvHashMap;
 use protobuf::SingularPtrField;
+use regex::Regex;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::*;
@@ -459,13 +460,11 @@ impl Builtin {
             ADD_DECIMAL | SUB_DECIMAL | MUL_DECIMAL | DIV_DECIMAL | ROUND_DECIMAL
             | EQUAL_DECIMAL | LEQ_DECIMAL | LESS_DECIMAL | GEQ_DECIMAL | GREATER_DECIMAL
             | TO_TEXT_DECIMAL | FROM_TEXT_DECIMAL | INT64_TO_DECIMAL | DECIMAL_TO_INT64
-            | ROUND_NUMERIC | GENMAP_EMPTY | GENMAP_INSERT | GENMAP_LOOKUP
-            | GENMAP_DELETE | GENMAP_KEYS | GENMAP_VALUES | GENMAP_SIZE
-            | EQUAL_TYPE_REP | EQUAL | LESS_EQ | LESS | GREATER_EQ | GREATER
-            | TEXT_TO_UPPER | TEXT_TO_LOWER | TEXT_SLICE | TEXT_SLICE_INDEX
-            | TEXT_CONTAINS_ONLY | TEXT_REPLICATE | TEXT_SPLIT_ON | TEXT_INTERCALATE => {
-                Unsupported(proto)
-            }
+            | ROUND_NUMERIC | GENMAP_EMPTY | GENMAP_INSERT | GENMAP_LOOKUP | GENMAP_DELETE
+            | GENMAP_KEYS | GENMAP_VALUES | GENMAP_SIZE | EQUAL_TYPE_REP | EQUAL | LESS_EQ
+            | LESS | GREATER_EQ | GREATER | TEXT_TO_UPPER | TEXT_TO_LOWER | TEXT_SLICE
+            | TEXT_SLICE_INDEX | TEXT_CONTAINS_ONLY | TEXT_REPLICATE | TEXT_SPLIT_ON
+            | TEXT_INTERCALATE => Unsupported(proto),
 
             // Misc
             TRACE => Unsupported(proto),
@@ -1495,6 +1494,7 @@ pub struct World {
     pub main: PackageId,
     packages: FnvHashMap<PackageId, Package>,
     pub map_entry_fields: Vec<String>,
+    pub numeric_regex: Regex,
 }
 
 impl World {
@@ -1528,10 +1528,12 @@ impl World {
             .map(|package| (package.id.clone(), package))
             .collect();
         let map_entry_fields = vec!["key".to_string(), "value".to_string()];
+        let numeric_regex = Regex::new(r"^[\+-]?\d+(\.\d+)?$").unwrap();
         let world = World {
             main,
             packages,
             map_entry_fields,
+            numeric_regex,
         };
         Ok(world)
     }

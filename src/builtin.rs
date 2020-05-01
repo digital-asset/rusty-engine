@@ -46,18 +46,18 @@ impl Builtin {
             LessInt64 => 2,
             GreaterInt64 => 2,
 
-            AddNumeric => 2,
-            SubNumeric => 2,
-            MulNumeric => 2,
-            DivNumeric => 2,
-            CastNumeric => 1,
-            ShiftNumeric => 1,
+            AddNumeric => 3,
+            SubNumeric => 3,
+            MulNumeric => 5,
+            DivNumeric => 5,
+            CastNumeric => 3,
+            ShiftNumeric => 3,
 
-            EqualNumeric => 2,
-            LeqNumeric => 2,
-            GeqNumeric => 2,
-            LessNumeric => 2,
-            GreaterNumeric => 2,
+            EqualNumeric => 3,
+            LeqNumeric => 3,
+            GeqNumeric => 3,
+            LessNumeric => 3,
+            GreaterNumeric => 3,
 
             AppendText => 2,
             ImplodeText => 1,
@@ -100,7 +100,7 @@ impl Builtin {
             DateFromDaysSinceEpoch => 1,
 
             Int64ToText => 1,
-            NumericToText => 1,
+            NumericToText => 2,
             TextToText => 1,
             PartyToText => 1,
             PartyToQuotedText => 1,
@@ -108,12 +108,12 @@ impl Builtin {
             DateToText => 1,
 
             Int64FromText => 1,
-            NumericFromText => 1,
+            NumericFromText => 2,
             PartyFromText => 1,
             GetParty => 1,
 
-            Int64ToNumeric => 1,
-            NumericToInt64 => 1,
+            Int64ToNumeric => 2,
+            NumericToInt64 => 2,
 
             Cons => 2,
             Foldr => 3,
@@ -173,28 +173,39 @@ impl Builtin {
             LessInt64 => Ok(Value::Bool(args[0].as_i64() < args[1].as_i64())),
             GreaterInt64 => Ok(Value::Bool(args[0].as_i64() > args[1].as_i64())),
 
-            AddNumeric => Ok(Value::Numeric(args[0].as_numeric() + args[1].as_numeric())),
-            SubNumeric => Ok(Value::Numeric(args[0].as_numeric() - args[1].as_numeric())),
-            MulNumeric => Ok(Value::Numeric(args[0].as_numeric() * args[1].as_numeric())),
+            // AddNumeric, SubNumeric: ∀ (α : nat) . 'Numeric' α → 'Numeric' α → 'Numeric' α
+            AddNumeric => Ok(Value::Numeric(args[1].as_numeric() + args[2].as_numeric())),
+            SubNumeric => Ok(Value::Numeric(args[1].as_numeric() - args[2].as_numeric())),
+            // MulNumeric, DivNumeric: ∀ (α₁ α₂ α : nat) . 'Numeric' α₁ → 'Numeric' α₂ → 'Numeric' α
+            MulNumeric => Ok(Value::Numeric(args[3].as_numeric() * args[4].as_numeric())),
             DivNumeric => {
                 use bigdecimal::Zero;
-                let den = args[1].as_numeric();
+                let den = args[4].as_numeric();
                 if den.is_zero() {
                     Err(String::from("Division by zero"))
                 } else {
-                    Ok(Value::Numeric(args[0].as_numeric() / den))
+                    Ok(Value::Numeric(args[3].as_numeric() / den))
                 }
             }
-            // NOTE(MH): We handle `CastNumeric` special to avoid cloning.
-            CastNumeric => panic!("Builtin::CastNumeric is handled in step"),
-            // FIXME(MH): This is completely wrong.
-            ShiftNumeric => Ok(Value::Numeric(args[0].as_numeric().clone())),
+            // CastNumeric, ShiftNumeric: ∀ (α₁, α₂ : nat) . 'Numeric' α₁ → 'Numeric' α₂
+            CastNumeric => Ok(Value::Numeric(args[2].as_numeric().clone())),
+            // FIXME(MH): We should at least scale properly.
+            ShiftNumeric => {
+                let s1 = args[0].as_i64();
+                let s2 = args[1].as_i64();
+                let (mantissa, exponent) = args[2].as_numeric().as_bigint_and_exponent();
+                Ok(Value::Numeric(BigDecimal::new(
+                    mantissa,
+                    exponent - s1 + s2,
+                )))
+            }
 
-            EqualNumeric => Ok(Value::Bool(args[0].as_numeric() == args[1].as_numeric())),
-            LeqNumeric => Ok(Value::Bool(args[0].as_numeric() <= args[1].as_numeric())),
-            GeqNumeric => Ok(Value::Bool(args[0].as_numeric() >= args[1].as_numeric())),
-            LessNumeric => Ok(Value::Bool(args[0].as_numeric() < args[1].as_numeric())),
-            GreaterNumeric => Ok(Value::Bool(args[0].as_numeric() > args[1].as_numeric())),
+            // <Compare>Numeric: ∀ (α : nat) . 'Numeric' α → 'Numeric' α → 'Bool'
+            EqualNumeric => Ok(Value::Bool(args[1].as_numeric() == args[2].as_numeric())),
+            LeqNumeric => Ok(Value::Bool(args[1].as_numeric() <= args[2].as_numeric())),
+            GeqNumeric => Ok(Value::Bool(args[1].as_numeric() >= args[2].as_numeric())),
+            LessNumeric => Ok(Value::Bool(args[1].as_numeric() < args[2].as_numeric())),
+            GreaterNumeric => Ok(Value::Bool(args[1].as_numeric() > args[2].as_numeric())),
 
             AppendText => {
                 let mut res = args[0].as_string().clone();
@@ -283,7 +294,8 @@ impl Builtin {
             }
 
             Int64ToText => Ok(Value::Text(args[0].as_i64().to_string())),
-            NumericToText => Ok(Value::Text(args[0].as_numeric().to_string())),
+            // NumericToText: ∀ (α : nat) . 'Numeric' α → 'Text'
+            NumericToText => Ok(Value::Text(args[1].as_numeric().to_string())),
             // NOTE(MH): We handle `TextToText` special to avoid cloning.
             TextToText => panic!("Builtin::TextToText is handled in step"),
             PartyToText => Ok(Value::Text(args[0].as_party().to_string())),
@@ -295,20 +307,31 @@ impl Builtin {
                 Err(_) => Value::None,
                 Ok(n) => Value::Some(Rc::new(Value::Int64(n))),
             }),
-            NumericFromText => Ok(match args[0].as_string().parse() {
-                Err(_) => Value::None,
-                Ok(d) => Value::Some(Rc::new(Value::Numeric(d))),
-            }),
+            // NumericFromText: ∀ (α : nat) . 'Text' → 'Optional' ('Numeric' α)
+            NumericFromText => {
+                let text = args[1].as_string();
+                let value = if world.numeric_regex.is_match(text) {
+                    match text.parse() {
+                        Err(_) => Value::None,
+                        Ok(d) => Value::Some(Rc::new(Value::Numeric(d))),
+                    }
+                } else {
+                    Value::None
+                };
+                Ok(value)
+            }
             PartyFromText => Ok(match args[0].as_string().parse() {
                 Err(_) => Value::None,
                 Ok(p) => Value::Some(Rc::new(Value::Party(p))),
             }),
             GetParty => args[0].as_string().parse().map(Value::Party),
 
-            Int64ToNumeric => Ok(Value::Numeric(BigDecimal::from(args[0].as_i64()))),
+            // Int64ToNumeric: ∀ (α : nat) . 'Int64' → 'Numeric' α
+            Int64ToNumeric => Ok(Value::Numeric(BigDecimal::from(args[1].as_i64()))),
+            // NumericToInt64: ∀ (α : nat) . 'Numeric' α → 'Int64'
             NumericToInt64 => {
                 use bigdecimal::ToPrimitive;
-                match args[0].as_numeric().to_i64() {
+                match args[1].as_numeric().to_i64() {
                     None => Err(String::from("Numeric too big for Int64")),
                     Option::Some(i) => Ok(Value::Int64(i)),
                 }
