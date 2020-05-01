@@ -24,7 +24,7 @@ This is an experimental implementation of a [DAML](https://daml.com/) scenario r
 
 # How to use this implementation
 
-This implementation is developed using Rust stable, which is at version 1.35.0 at the time of this writing.
+This implementation is developed using Rust stable, which is at version 1.43 at the time of this writing.
 
 To run all scenarios in a `.dar` file, execute
 ```
@@ -37,4 +37,22 @@ $ cargo run <path-to-dar> <module-name>
 To run a specific scenario in a `.dar` file, execute
 ```
 $ cargo run <path-to-dar> <module-name> <scenario-name>
+```
+
+# Benchmarks
+
+There is a very simple benchmark which times the execution of the `CollectAuthority:test` scenario from the DAML project in `test/collect-authority`. To execute this benchmark, run
+```shell
+$ cargo bench
+```
+This will print some numbers in the terminal and produce some nice charts that can be found in `target/criterion/report/index.html` in the _collect-authority.dar:CollectAuthority:test_ section.
+
+To execute this benchmark with different command line arguments, for instance with a different sample size, run
+```shell
+$ cargo bench --bench scenario -- --sample-size 50
+```
+
+To execute the benchmark runner on a different scenario, you can change the `RUSTY_BENCH_SCENARIO` environment variable to point to it, as in
+```shell
+$ RUSTY_BENCH_SCENARIO=/path/to.dar:Module.Name:scenarioName cargo bench
 ```
