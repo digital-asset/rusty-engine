@@ -1,8 +1,8 @@
--- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
--- SPDX-License-Identifier: Apache-2
+-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates.
+-- All rights reserved.
 
--- @ERROR Aborted: boom
-daml 1.2
+-- @ERROR range=9:0-9:4; Aborted: boom
+
 module PolymorphicTest where
 
 main : Scenario a

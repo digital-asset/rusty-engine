@@ -160,6 +160,7 @@ mod tests {
                 ("B's Company is run by B and they are 3 years old", None),
             ),
             (("RightOfUse", "example"), ("authorization missing", None)),
+            (("TransientFailure", "testBio"), ("Assertion failed", None)),
             (("Unicode", "main"), ("⛄ ¯\\_(ツ)_/¯", None)),
             (("UnusedLet", "main"), ("BOOM", None)),
         ]

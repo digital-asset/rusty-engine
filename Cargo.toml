@@ -15,11 +15,11 @@ license = "Apache-2.0"
 
 [dependencies]
 fnv = "1.0.6"
-hex = "0.3.2"
+hex = "0.4.2"
 libflate = ">= 0.1.25"
-protobuf = "2.8.0"
-sha2 = "0.8.0"
-zip = "0.5.2"
+protobuf = "2.14.0"
+sha2 = "0.8.1"
+zip = "0.5.5"
 
 [build-dependencies]
-protobuf-codegen-pure = "2.8.0"
+protobuf-codegen-pure = "2.14.0"

@@ -11,11 +11,13 @@ SPDX-License-Identifier: Apache-2.0
 This is an experimental implementation of a [DAML](https://daml.com/) scenario runner written in [Rust](https://www.rust-lang.org/). It is not intended for production use and clearly not ready for it:
 
 - It can only run scenarios and does not produce transaction trees.
-- The `Decimal` type is not supported at all.
+- The `Decimal` and `Numeric` types are not supported at all.
 - Contract keys are not supported.
+- The `Any` type and `TypeRep` are not supported.
 - The conversion between `Text` and code points uses [Unicode scalar values](http://www.unicode.org/glossary/#unicode_scalar_value) rather than [Unicode code points](http://www.unicode.org/glossary/#code_point).
 - The performance of the `Map` type is atrocious.
 - The `trace` primitive is not supported.
+- Struct updates are not supported.
 - There has been barely any performance tweaking.
 - There has been no code review whatsoever.
 

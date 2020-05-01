@@ -1,7 +1,7 @@
--- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
--- SPDX-License-Identifier: Apache-2
+-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates.
+-- All rights reserved.
 
-daml 1.2
+
 module Optional where
 
 import DA.Optional
@@ -48,7 +48,7 @@ testOptionalToList = scenario do
 
 testFromOptional = scenario do
   1 === fromOptional 0 (Some 1)
-  -- TODO(MH): 2.3 === fromOptional 2.3 None
+  "2.3" === fromOptional "2.3" None
 
 testIsSome = scenario do
   True === isSome (Some "a")

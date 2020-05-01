@@ -1,18 +1,21 @@
--- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
--- SPDX-License-Identifier: Apache-2
+-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates.
+-- All rights reserved.
 
-daml 1.2
+
 module Iou12 where
 
 template Iou
   with
     issuer : Party
     owner : Party
-    currency : Text
-    amount : Int
+    currency : Text      -- ^ only 3-letter symbols are allowed
+    -- NOTE(MH): Avoid Decimal.
+    amount : Int     -- ^ must be positive
+    regulators : [Party] -- ^ `regulators` may observe any use of the `Iou`
   where
     signatory issuer
     ensure amount > 0
+    observer owner :: regulators
 
     agreement show issuer <> " promises to pay " <>
               show amount <> " " <> currency <>
@@ -28,13 +31,15 @@ template Iou
         do
           return ()
 
-      Transfer : ContractId Iou
+      Transfer : ContractId Iou -- ^ changes the owner
         with newOwner : Party
         do
           updateOwner newOwner
 
-      Split : (ContractId Iou, ContractId Iou)
-        with splitAmount : Int
+      Split : (ContractId Iou, ContractId Iou) -- ^ splits into two `Iou`s with
+                                               --   smaller amounts
+        with
+          splitAmount : Int -- ^ must be between zero and original amount
         do
           -- Split the IOU by dividing the amount.
           let restAmount = amount - splitAmount
@@ -43,7 +48,11 @@ template Iou
           return (splitCid, restCid)
 
       Merge : ContractId Iou
-        with otherCid : ContractId Iou
+        -- ^ merges two "compatible" `Iou`s
+        with otherCid : ContractId Iou -- ^ Must have same owner, issuer, and
+                                       --   currency. The regulators may
+                                       --   differ, and are taken from the
+                                       --   original `Iou`.
         do
           -- Merge two IOUs by aggregating their amounts.
           otherIou <- fetch otherCid
@@ -58,11 +67,17 @@ template Iou
           updateAmount (amount + otherIou.amount)
 
 
+{- |
+A single test scenario covering all functionality that `Iou` implements.
+This description contains [a link](http://example.com), some bogus <inline html>,
+and words_ with_ underscore, to test damldoc capabilities.
+-}
 main = scenario do
   bank <- getParty "Acme Bank"
   alice <- getParty "Alice"
   bob <- getParty "Bob"
   charlie <- getParty "Charlie"
+  sec <- getParty "Securities Exchange Commission"
 
   -- Bank creates Iou's for Alice and Bob
 
@@ -72,6 +87,7 @@ main = scenario do
       owner    = alice
       currency = "USD"
       amount   = 100
+      regulators = [sec]
 
   iouBobCid <- submit bank do
     create Iou with
@@ -79,6 +95,7 @@ main = scenario do
       owner    = bob
       currency = "USD"
       amount   = 30
+      regulators = [sec]
 
   -- Alice transfers some Iou's to Bob
   (split, rest) <- submit alice do
@@ -98,6 +115,7 @@ main = scenario do
       owner    = alice
       currency = "USD"
       amount   = 60
+      regulators = [sec]
 
 
   submit bob do
@@ -107,6 +125,7 @@ main = scenario do
       owner    = bob
       currency = "USD"
       amount   = 70
+      regulators = [sec]
 
   -- Issuer can archive Iou's they own
   iouBankCid <- submit bank do
@@ -115,6 +134,8 @@ main = scenario do
       owner    = bank
       currency = "USD"
       amount   = 100
+      regulators = [sec]
+
   submit bank do exercise iouBankCid Archive
   submitMustFail bank do fetch iouBankCid
 
@@ -129,6 +150,7 @@ main = scenario do
       owner    = alice
       currency = "USD"
       amount   = 50
+      regulators = [sec]
 
   -- Acme Bank can't create IOUs with a negative amount.
   submitMustFail bank do
@@ -137,6 +159,7 @@ main = scenario do
       owner    = alice
       currency = "USD"
       amount   = -20
+      regulators = [sec]
 
   -- SplitAmount needs to be between 0 and amount.
   submitMustFail alice do exercise rest Split with splitAmount = 80
@@ -166,6 +189,7 @@ main = scenario do
       owner    = alice
       currency = "EUR"
       amount   = 60
+      regulators = [sec]
 
   submitMustFail alice do
     exercise rest Merge with otherCid = iouEURCid
