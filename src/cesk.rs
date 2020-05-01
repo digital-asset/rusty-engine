@@ -212,6 +212,7 @@ impl<'a> State<'a> {
                     PrimLit::Nil => Value::Nil,
                     PrimLit::None => Value::None,
                     PrimLit::Int64(i) => Value::Int64(*i),
+                    PrimLit::Numeric(d) => Value::Numeric(d.clone()),
                     PrimLit::Text(s) => Value::Text(s.clone()),
                     PrimLit::MapEmpty => Value::Map(FnvHashMap::default()),
                     PrimLit::Unsupported(msg) => panic!("PrimLit::Unsupported({})", msg),

@@ -1,5 +1,6 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+use bigdecimal::BigDecimal;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::fmt;
 use std::rc::Rc;
@@ -29,6 +30,7 @@ pub enum Value<'a> {
     Unit,
     Bool(bool),
     Int64(i64),
+    Numeric(BigDecimal),
     Text(String),
     Party(Party),
     ContractId(ContractId),
@@ -171,6 +173,13 @@ impl<'a> Value<'a> {
         match self {
             Value::Int64(i) => *i,
             _ => panic!("Expected Int64, found {:?}", self),
+        }
+    }
+
+    pub fn as_numeric(&self) -> &BigDecimal {
+        match self {
+            Value::Numeric(n) => n,
+            _ => panic!("Expected Numeric, found {:?}", self),
         }
     }
 
