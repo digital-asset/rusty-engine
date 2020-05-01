@@ -1,9 +1,9 @@
--- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
--- SPDX-License-Identifier: Apache-2
+-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates.
+-- All rights reserved.
 
 -- @SINCE-LF 1.1
 -- Test that `(->)` can be used without any arguments.
-daml 1.2
+
 module Profunctor where
 
 class Profunctor p where

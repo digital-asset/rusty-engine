@@ -1,0 +1,7 @@
+sdk-version: 1.0.0
+name: bond-trading
+version: 0.0.1
+source: .
+dependencies:
+- daml-prim
+- daml-stdlib

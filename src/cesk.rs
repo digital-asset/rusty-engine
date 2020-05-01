@@ -253,6 +253,8 @@ impl<'a> State<'a> {
                 Ctrl::from_prim(Prim::VariantCon(tycon, con), 1)
             }
 
+            Expr::EnumCon { tycon, con } => Ctrl::from_value(Value::EnumCon(&tycon, &con)),
+
             Expr::TupleCon { fields, exprs } => {
                 self.kont.extend(exprs.iter().rev().map(Kont::Arg));
                 Ctrl::from_prim(Prim::TupleCon(fields), exprs.len())
@@ -690,6 +692,17 @@ impl<'a> State<'a> {
                             self.kont.push(Kont::Pop(1));
                             self.env.push(Rc::clone(&arg));
                         }
+                        Ctrl::Expr(&alt.body)
+                    }
+                    Value::EnumCon(_tycon, con1) => {
+                        let alt = alts
+                            .iter()
+                            .find(|alt| match &alt.pattern {
+                                Pat::Enum(con2) => *con1 == con2,
+                                Pat::Default => true,
+                                _ => false,
+                            })
+                            .unwrap_or_else(|| panic!("No match for {:?} in {:?}", value, alts));
                         Ctrl::Expr(&alt.body)
                     }
                     Value::Nil => Ctrl::Expr(&alts[0].body),

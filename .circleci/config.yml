@@ -24,7 +24,7 @@ jobs:
               cargo install cargo-audit || true
               cargo install cargo-license || true
               cargo audit
-              diff <(cargo license --do-not-bundle | sed 's/\x1b\[[0-9;]*m//g' | LC_ALL=C sort) NOTICES
+              diff <(cargo-license --do-not-bundle | sed 's/\x1b\[[0-9;]*m//g' | LC_ALL=C sort) NOTICES
       - run:
           name: Build
           command: cargo build --all --all-targets --locked

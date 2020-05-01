@@ -1,43 +1,19 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-extern crate protobuf_codegen_pure;
-
-use std::process::Command;
-
-fn sed_in_place(file: &str, command: &str) {
-    let mut cmd = Command::new("sed");
-    cmd.arg("-i");
-    if std::env::consts::OS == "macos" {
-        cmd.arg("");
-    }
-    cmd.arg(command).arg(file).output().expect("sed -i");
-}
 
 fn main() {
     let out_dir = "src/protos/da";
     let inputs = &[
-        "protos/da/daml_lf.proto",
-        "protos/da/daml_lf_0.proto",
-        "protos/da/daml_lf_1.proto",
+        "protos/com/daml/daml_lf_dev/daml_lf.proto",
+        "protos/com/daml/daml_lf_dev/daml_lf_0.proto",
+        "protos/com/daml/daml_lf_dev/daml_lf_1.proto",
     ];
 
     std::fs::create_dir_all(out_dir).expect("mkdir -p");
-    extern crate protobuf_codegen_pure;
-
-    protobuf_codegen_pure::run(protobuf_codegen_pure::Args {
-        out_dir,
-        input: inputs,
-        includes: &["protos"],
-        customize: protobuf_codegen_pure::Customize {
-            ..Default::default()
-        },
-    })
-    .expect("protoc");
-
-    // NOTE(MH): The protobuf codegen produces `#[allow(clippy)]` pragmas,
-    // which cause a clippy warning. Thus we need to patch it.
-    for input in inputs {
-        let output = "src/".to_string() + &input.replace(".proto", ".rs");
-        sed_in_place(&output, "s/allow(clippy)/allow(clippy::all)/");
-    }
+    protobuf_codegen_pure::Codegen::new()
+        .out_dir(out_dir)
+        .inputs(inputs)
+        .includes(&["protos"])
+        .run()
+        .expect("protoc");
 }

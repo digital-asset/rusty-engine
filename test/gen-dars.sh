@@ -3,7 +3,5 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euxo pipefail
 
-export DAML_SDK_VERSION=0.13.5
-
-daml damlc package --target=1.dev bond-trading/Main.daml bond-trading
-daml damlc package --target=1.dev damlc-tests/All.daml damlc-tests
+(cd bond-trading; daml build --output=../bond-trading.dar)
+(cd damlc-tests; daml build --output=../damlc-tests.dar)

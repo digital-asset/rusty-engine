@@ -36,6 +36,7 @@ pub enum Value<'a> {
     Date(Date),
     RecCon(&'a TypeConRef, &'a Vec<String>, Vec<Rc<Value<'a>>>),
     VariantCon(&'a TypeConRef, &'a String, Rc<Value<'a>>),
+    EnumCon(&'a TypeConRef, &'a String),
     TupleCon(&'a Vec<String>, Vec<Rc<Value<'a>>>), // DAML-LF tuples aka structural records.
     Nil,
     Cons(Rc<Value<'a>>, Rc<Value<'a>>),

@@ -1,5 +1,5 @@
--- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
--- SPDX-License-Identifier: Apache-2
+-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates.
+-- All rights reserved.
 
 -- Previously failed due to:
 -- + DEL-5923 return not in scope
@@ -7,7 +7,7 @@
 -- + DEL-5958 ApplicativeDo pieces
 {-# LANGUAGE ApplicativeDo #-}
 
-daml 1.2
+
 module QualifiedPrelude where
 
 import Prelude qualified as P

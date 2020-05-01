@@ -1,10 +1,10 @@
--- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
--- SPDX-License-Identifier: Apache-2
+-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates.
+-- All rights reserved.
 
 {-# LANGUAGE Rank2Types #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 
-daml 1.2
+
 module Rank2 where
 
 applyBoth : (forall c . [c] -> [c]) -> ([a], [b]) -> ([a], [b])

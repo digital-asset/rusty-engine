@@ -1,9 +1,9 @@
--- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
--- SPDX-License-Identifier: Apache-2
+-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates.
+-- All rights reserved.
 
 -- Check that default implementations for type class methods can be translated
 -- even in corner cases.
-daml 1.2
+
 module DefaultMethods where
 
 -- Default implementation for method without arguments.
@@ -28,6 +28,14 @@ class (Functor t, FoldableX t) => TraversableX t where
 -- a value cycle.
 class Id a where
   id : a -> a
-  id = \x -> x
+  id = identity
 
 instance Id Int where
+
+-- | Default implementation with a separate type signature for the default method.
+class MyShow t where
+  -- | Doc for method.
+  myShow : t -> Text
+  -- | Doc for default.
+  default myShow : Show t => t -> Text
+  myShow = show

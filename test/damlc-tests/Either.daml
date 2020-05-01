@@ -1,7 +1,7 @@
--- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
--- SPDX-License-Identifier: Apache-2
+-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates.
+-- All rights reserved.
 
-daml 1.2
+
 module Either where
 
 import DA.Either
@@ -24,12 +24,12 @@ testPartitionEithers = scenario do
   ([1], []) === partitionEithers ([Left 1] : [Either Int Bool])
 
 testIsLeft = scenario do
-  True === isLeft (Left 1 : Either Int Int)
-  False === isLeft (Right 1 : Either Int Int)
+  True === isLeft (Left "1.0" : Either Text Int)
+  False === isLeft (Right 1 : Either Text Int)
 
 testIsRight = scenario do
-  False === isRight (Left 1 : Either Int Int)
-  True === isRight (Right 1 : Either Int Int)
+  False === isRight (Left "1.0" : Either Text Int)
+  True === isRight (Right 1 : Either Text Int)
 
 testFromLeft = scenario do
   2 === fromLeft 1 (Left 2)
@@ -45,4 +45,4 @@ testOptionalToEither = scenario do
 
 testEitherToOptional = scenario do
   Some 1 === eitherToOptional (Right 1)
-  None === eitherToOptional ((Left "a") : Either Text Int)
+  None === eitherToOptional (Left "a" : Either Text Int)
