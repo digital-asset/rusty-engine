@@ -90,9 +90,16 @@ pub type Binder = String;
 
 pub type PackageId = String;
 
-// FIXME(MH): We need a better name.
-pub fn dotted_name_from_proto(proto: daml_lf_1::DottedName) -> String {
+fn dotted_name_from_proto(proto: daml_lf_1::DottedName) -> String {
     proto.segments.into_vec().join(".")
+}
+
+fn var_with_type_from_proto(proto: Option<daml_lf_1::VarWithType_oneof_var>, env: &Env) -> String {
+    use daml_lf_1::VarWithType_oneof_var::*;
+    match proto.unwrap() {
+        var_str(name) => name,
+        var_interned_str(id) => env.get_interned_string(id),
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -121,12 +128,8 @@ impl ModuleRef {
             package_id_interned_str(id) => env.get_interned_string(id),
         };
         let module_name = match proto.module_name.unwrap() {
-            module_name_dname(dotted_name) => {
-                dotted_name_from_proto(dotted_name)
-            }
-            module_name_interned_dname(id) => {
-                env.get_interned_dotted_name(id)
-            }
+            module_name_dname(dotted_name) => dotted_name_from_proto(dotted_name),
+            module_name_interned_dname(id) => env.get_interned_dotted_name(id),
         };
         ModuleRef {
             package_id,
@@ -454,7 +457,7 @@ impl Pat {
             variant(x) => {
                 use daml_lf_1::CaseAlt_Variant_oneof_binder::*;
                 use daml_lf_1::CaseAlt_Variant_oneof_variant::*;
-                        let v = match x.variant.unwrap() {
+                let v = match x.variant.unwrap() {
                     variant_str(name) => name,
                     variant_interned_str(id) => env.get_interned_string(id),
                 };
@@ -479,7 +482,7 @@ impl Pat {
                     CON_FALSE => Pat::Bool(false),
                     CON_TRUE => Pat::Bool(true),
                 }
-            },
+            }
             nil(_) => Pat::Nil,
             cons(x) => {
                 use daml_lf_1::CaseAlt_Cons_oneof_var_head::*;
@@ -643,6 +646,23 @@ impl Expr {
         Box::new(Self::from_proto(proto, env))
     }
 
+    fn with_fields_from_proto(
+        protos: protobuf::RepeatedField<daml_lf_1::FieldWithExpr>,
+        env: &mut Env,
+    ) -> (Vec<String>, Vec<Expr>) {
+        use daml_lf_1::FieldWithExpr_oneof_field::*;
+        protos
+            .into_iter()
+            .map(|proto| {
+                let field = match proto.field.unwrap() {
+                    field_str(name) => name,
+                    field_interned_str(id) => env.get_interned_string(id),
+                };
+                (field, Expr::from_proto(proto.expr, env))
+            })
+            .unzip()
+    }
+
     fn from_proto_unboxed(proto: daml_lf_1::Expr, env: &mut Env) -> Expr {
         use daml_lf_1::Expr_oneof_Sum::*;
 
@@ -668,9 +688,7 @@ impl Expr {
                 };
                 Expr::Val { module_ref, name }
             }
-            builtin(daml_lf_1::BuiltinFunction::TEXTMAP_EMPTY) => {
-                Expr::PrimLit(PrimLit::MapEmpty)
-            }
+            builtin(daml_lf_1::BuiltinFunction::TEXTMAP_EMPTY) => Expr::PrimLit(PrimLit::MapEmpty),
             builtin(x) => Expr::Builtin(Builtin::from_proto(x)),
             prim_con(x) => {
                 use daml_lf_1::PrimCon::*;
@@ -682,18 +700,8 @@ impl Expr {
             }
             prim_lit(x) => Expr::PrimLit(PrimLit::from_proto(x, env)),
             rec_con(x) => {
-                use daml_lf_1::FieldWithExpr_oneof_field::*;
                 let tycon = TypeConRef::from_proto(x.tycon.unwrap().tycon, env);
-                let mut fields = Vec::with_capacity(x.fields.len());
-                let mut exprs = Vec::with_capacity(x.fields.len());
-                for fx in x.fields.into_iter() {
-                    let field = match fx.field.unwrap() {
-                        field_str(name) => name,
-                        field_interned_str(id) => env.get_interned_string(id),
-                    };
-                    fields.push(field);
-                    exprs.push(Self::from_proto(fx.expr, env));
-                }
+                let (fields, exprs) = Self::with_fields_from_proto(x.fields, env);
                 Expr::RecCon {
                     tycon,
                     fields,
@@ -741,17 +749,7 @@ impl Expr {
                 Expr::VariantCon { tycon, con, arg }
             }
             struct_con(x) => {
-                use daml_lf_1::FieldWithExpr_oneof_field::*;
-                let mut fields = Vec::with_capacity(x.fields.len());
-                let mut exprs = Vec::with_capacity(x.fields.len());
-                for fx in x.fields.into_iter() {
-                    let field = match fx.field.unwrap() {
-                        field_str(name) => name,
-                        field_interned_str(id) => env.get_interned_string(id),
-                    };
-                    fields.push(field);
-                    exprs.push(Self::from_proto(fx.expr, env));
-                }
+                let (fields, exprs) = Self::with_fields_from_proto(x.fields, env);
                 Expr::TupleCon { fields, exprs }
             }
             struct_proj(x) => {
@@ -774,14 +772,10 @@ impl Expr {
             }
             ty_app(x) => Self::from_proto(x.expr, env),
             abs(x) => {
-                use daml_lf_1::VarWithType_oneof_var::*;
                 let params: Vec<Binder> = x
                     .param
                     .into_iter()
-                    .map(|x| match x.var.unwrap() {
-                        var_str(name) => name,
-                        var_interned_str(id) => env.get_interned_string(id),
-                    })
+                    .map(|x| var_with_type_from_proto(x.var, env))
                     .collect();
                 let body = {
                     env.push_many(&params);
@@ -802,13 +796,9 @@ impl Expr {
                 Expr::make_case(scrut, alts)
             }
             field_let(x) => {
-                use daml_lf_1::VarWithType_oneof_var::*;
                 let mut bindings = Vec::with_capacity(x.bindings.len());
                 for binding in x.bindings.into_iter() {
-                    let binder = match binding.binder.unwrap().var.unwrap() {
-                        var_str(name) => name,
-                        var_interned_str(id) => env.get_interned_string(id),
-                    };
+                    let binder = var_with_type_from_proto(binding.binder.unwrap().var, env);
                     let bound = Self::boxed_from_proto(binding.bound, env);
                     env.push(&binder);
                     bindings.push((binder, bound));
@@ -936,13 +926,9 @@ impl Expr {
         match proto.Sum.unwrap() {
             field_pure(x) => Self::from_proto(x.expr, env),
             block(x) => {
-                use daml_lf_1::VarWithType_oneof_var::*;
                 let mut bindings = Vec::with_capacity(x.bindings.len());
                 for binding in x.bindings.into_iter() {
-                    let binder = match binding.binder.unwrap().var.unwrap() {
-                        var_str(name) => name,
-                        var_interned_str(id) => env.get_interned_string(id),
-                    };
+                    let binder = var_with_type_from_proto(binding.binder.unwrap().var, env);
                     let bound = apply_token(Self::from_proto(binding.bound, env));
                     env.push(&binder);
                     bindings.push((binder, bound));
@@ -1010,13 +996,9 @@ impl Expr {
         match proto.Sum.unwrap() {
             field_pure(x) => Self::from_proto(x.expr, env),
             block(x) => {
-                use daml_lf_1::VarWithType_oneof_var::*;
                 let mut bindings = Vec::with_capacity(x.bindings.len());
                 for binding in x.bindings.into_iter() {
-                    let binder = match binding.binder.unwrap().var.unwrap() {
-                        var_str(name) => name,
-                        var_interned_str(id) => env.get_interned_string(id),
-                    };
+                    let binder = var_with_type_from_proto(binding.binder.unwrap().var, env);
                     let bound = apply_token(Self::from_proto(binding.bound, env));
                     env.push(&binder);
                     bindings.push((binder, bound));
@@ -1180,7 +1162,6 @@ impl Choice {
     ) -> Self {
         use daml_lf_1::TemplateChoice_oneof_name::*;
         use daml_lf_1::TemplateChoice_oneof_self_binder::*;
-        use daml_lf_1::VarWithType_oneof_var::*;
         let name = match proto.name.unwrap() {
             name_str(name) => name,
             name_interned_str(id) => env.get_interned_string(id),
@@ -1192,10 +1173,7 @@ impl Choice {
             self_binder_str(name) => name,
             self_binder_interned_str(id) => env.get_interned_string(id),
         };
-        let arg_binder = match proto.arg_binder.unwrap().var.unwrap() {
-            var_str(name) => name,
-            var_interned_str(id) => env.get_interned_string(id),
-        };
+        let arg_binder = var_with_type_from_proto(proto.arg_binder.unwrap().var, env);
         env.push(&arg_binder);
         let controllers = Expr::from_proto(proto.controllers, env);
         env.pop(&arg_binder);
