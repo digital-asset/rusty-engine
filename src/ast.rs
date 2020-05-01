@@ -10,7 +10,7 @@ use crate::protos::da::daml_lf;
 use crate::protos::da::daml_lf_1;
 
 mod debruijn {
-    use super::PackageId;
+    use super::{Binder, PackageId};
     use std::borrow::Borrow;
     use std::collections::HashMap;
 
@@ -18,7 +18,8 @@ mod debruijn {
         pub self_package_id: PackageId,
         interned_strings: Vec<String>,
         interned_dotted_names: Vec<String>,
-        rev_indices: HashMap<super::Binder, Vec<usize>>,
+        rev_indices: HashMap<Binder, Vec<usize>>,
+        ty_vars: HashMap<Binder, Vec<Option<usize>>>,
         depth: usize,
     }
 
@@ -33,6 +34,7 @@ mod debruijn {
                 interned_strings,
                 interned_dotted_names,
                 rev_indices: HashMap::new(),
+                ty_vars: HashMap::new(),
                 depth: 0,
             }
         }
@@ -80,6 +82,31 @@ mod debruijn {
             for var in vars {
                 self.pop(var.borrow());
             }
+        }
+
+        pub fn push_ty_var(&mut self, var: &str, is_nat: bool) {
+            self.ty_vars
+                .entry(var.to_owned())
+                .or_insert_with(Vec::new)
+                .push(if is_nat { Some(self.depth) } else { None });
+            if is_nat {
+                self.depth += 1;
+            }
+        }
+
+        pub fn pop_ty_var(&mut self, var: &str) {
+            let index_opt: Option<usize> = self.ty_vars.get_mut(var).and_then(|v| v.pop()).unwrap();
+            if index_opt.is_some() {
+                self.depth -= 1;
+            }
+        }
+
+        pub fn get_ty_var(&self, var: &str) -> Option<usize> {
+            self.ty_vars
+                .get(var)
+                .and_then(|v| v.last())
+                .unwrap()
+                .map(|index| self.depth - index)
         }
     }
 }
@@ -770,7 +797,42 @@ impl Expr {
                     .collect();
                 Expr::App { fun, args }
             }
-            ty_app(x) => Self::from_proto(x.expr, env),
+            ty_app(x) => {
+                // NOTE(MH): Ignoring type synonyms, which we only use for
+                // dictionary types right now, the only ways to construct a type
+                // of kind `Nat` are type level literals and type variables of
+                // kind `Nat`. The latter are tracked in the environment.
+                let fun = Self::from_proto(x.expr, env);
+                let args: Vec<Expr> = x
+                    .types
+                    .into_iter()
+                    .filter_map(|typ| {
+                        use daml_lf_1::Type_oneof_Sum::*;
+                        match typ.Sum.unwrap() {
+                            nat(n) => Some(Expr::PrimLit(PrimLit::Int64(n))),
+                            var(ty_var) if ty_var.args.len() == 0 => {
+                                use daml_lf_1::Type_Var_oneof_var::*;
+                                let name = match ty_var.var.unwrap() {
+                                    var_str(name) => name,
+                                    var_interned_str(id) => env.get_interned_string(id),
+                                };
+                                env.get_ty_var(&name).map(|index| Expr::Var { name, index })
+                            }
+                            _ => None,
+                        }
+                    })
+                    .collect();
+                // TODO(MH): Once we've implemented a pass to merge adjacent
+                // `Expr::App`s, we can always return the else case here.
+                if args.is_empty() {
+                    fun
+                } else {
+                    Expr::App {
+                        fun: Box::new(fun),
+                        args,
+                    }
+                }
+            }
             abs(x) => {
                 let params: Vec<Binder> = x
                     .param
@@ -785,7 +847,48 @@ impl Expr {
                 };
                 Expr::Lam { params, body }
             }
-            ty_abs(x) => Self::from_proto(x.body, env),
+            ty_abs(x) => {
+                use daml_lf_1::TypeVarWithKind_oneof_var::*;
+                let all_params: Vec<(Binder, bool)> = x
+                    .param
+                    .into_iter()
+                    .map(|param| {
+                        let binder = match param.var.unwrap() {
+                            var_str(name) => name,
+                            var_interned_str(id) => env.get_interned_string(id),
+                        };
+                        let is_nat = matches!(
+                            param.kind.unwrap().Sum.unwrap(),
+                            daml_lf_1::Kind_oneof_Sum::nat(_)
+                        );
+                        (binder, is_nat)
+                    })
+                    .collect();
+                let body = {
+                    for (binder, is_nat) in &all_params {
+                        env.push_ty_var(binder, *is_nat);
+                    }
+                    let body = Self::from_proto(x.body, env);
+                    for (binder, _) in all_params.iter().rev() {
+                        env.pop_ty_var(binder);
+                    }
+                    body
+                };
+                let params: Vec<Binder> = all_params
+                    .into_iter()
+                    .filter_map(|(binder, is_nat)| if is_nat { Some(binder) } else { None })
+                    .collect();
+                // TODO(MH): Once we've implemented a pass to merge adjacent
+                // `Expr::Lam`s, we can always return the else case here.
+                if params.is_empty() {
+                    body
+                } else {
+                    Expr::Lam {
+                        params,
+                        body: Box::new(body),
+                    }
+                }
+            }
             case(x) => {
                 let scrut = Self::boxed_from_proto(x.scrut, env);
                 let alts = x
