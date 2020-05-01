@@ -14,6 +14,7 @@ readme = "README.md"
 license = "Apache-2.0"
 
 [dependencies]
+bigdecimal = "0.1.2"
 fnv = "1.0.6"
 hex = "0.4.2"
 libflate = ">= 0.1.25"

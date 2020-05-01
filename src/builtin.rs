@@ -1,5 +1,6 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+use bigdecimal::BigDecimal;
 use std::rc::Rc;
 
 use crate::ast::*;
@@ -45,6 +46,19 @@ impl Builtin {
             LessInt64 => 2,
             GreaterInt64 => 2,
 
+            AddNumeric => 2,
+            SubNumeric => 2,
+            MulNumeric => 2,
+            DivNumeric => 2,
+            CastNumeric => 1,
+            ShiftNumeric => 1,
+
+            EqualNumeric => 2,
+            LeqNumeric => 2,
+            GeqNumeric => 2,
+            LessNumeric => 2,
+            GreaterNumeric => 2,
+
             AppendText => 2,
             ImplodeText => 1,
             ExplodeText => 1,
@@ -86,6 +100,7 @@ impl Builtin {
             DateFromDaysSinceEpoch => 1,
 
             Int64ToText => 1,
+            NumericToText => 1,
             TextToText => 1,
             PartyToText => 1,
             PartyToQuotedText => 1,
@@ -93,8 +108,12 @@ impl Builtin {
             DateToText => 1,
 
             Int64FromText => 1,
+            NumericFromText => 1,
             PartyFromText => 1,
             GetParty => 1,
+
+            Int64ToNumeric => 1,
+            NumericToInt64 => 1,
 
             Cons => 2,
             Foldr => 3,
@@ -153,6 +172,29 @@ impl Builtin {
             GeqInt64 => Ok(Value::Bool(args[0].as_i64() >= args[1].as_i64())),
             LessInt64 => Ok(Value::Bool(args[0].as_i64() < args[1].as_i64())),
             GreaterInt64 => Ok(Value::Bool(args[0].as_i64() > args[1].as_i64())),
+
+            AddNumeric => Ok(Value::Numeric(args[0].as_numeric() + args[1].as_numeric())),
+            SubNumeric => Ok(Value::Numeric(args[0].as_numeric() - args[1].as_numeric())),
+            MulNumeric => Ok(Value::Numeric(args[0].as_numeric() * args[1].as_numeric())),
+            DivNumeric => {
+                use bigdecimal::Zero;
+                let den = args[1].as_numeric();
+                if den.is_zero() {
+                    Err(String::from("Division by zero"))
+                } else {
+                    Ok(Value::Numeric(args[0].as_numeric() / den))
+                }
+            }
+            // NOTE(MH): We handle `CastNumeric` special to avoid cloning.
+            CastNumeric => panic!("Builtin::CastNumeric is handled in step"),
+            // FIXME(MH): This is completely wrong.
+            ShiftNumeric => Ok(Value::Numeric(args[0].as_numeric().clone())),
+
+            EqualNumeric => Ok(Value::Bool(args[0].as_numeric() == args[1].as_numeric())),
+            LeqNumeric => Ok(Value::Bool(args[0].as_numeric() <= args[1].as_numeric())),
+            GeqNumeric => Ok(Value::Bool(args[0].as_numeric() >= args[1].as_numeric())),
+            LessNumeric => Ok(Value::Bool(args[0].as_numeric() < args[1].as_numeric())),
+            GreaterNumeric => Ok(Value::Bool(args[0].as_numeric() > args[1].as_numeric())),
 
             AppendText => {
                 let mut res = args[0].as_string().clone();
@@ -241,6 +283,7 @@ impl Builtin {
             }
 
             Int64ToText => Ok(Value::Text(args[0].as_i64().to_string())),
+            NumericToText => Ok(Value::Text(args[0].as_numeric().to_string())),
             // NOTE(MH): We handle `TextToText` special to avoid cloning.
             TextToText => panic!("Builtin::TextToText is handled in step"),
             PartyToText => Ok(Value::Text(args[0].as_party().to_string())),
@@ -252,11 +295,24 @@ impl Builtin {
                 Err(_) => Value::None,
                 Ok(n) => Value::Some(Rc::new(Value::Int64(n))),
             }),
+            NumericFromText => Ok(match args[0].as_string().parse() {
+                Err(_) => Value::None,
+                Ok(d) => Value::Some(Rc::new(Value::Numeric(d))),
+            }),
             PartyFromText => Ok(match args[0].as_string().parse() {
                 Err(_) => Value::None,
                 Ok(p) => Value::Some(Rc::new(Value::Party(p))),
             }),
             GetParty => args[0].as_string().parse().map(Value::Party),
+
+            Int64ToNumeric => Ok(Value::Numeric(BigDecimal::from(args[0].as_i64()))),
+            NumericToInt64 => {
+                use bigdecimal::ToPrimitive;
+                match args[0].as_numeric().to_i64() {
+                    None => Err(String::from("Numeric too big for Int64")),
+                    Option::Some(i) => Ok(Value::Int64(i)),
+                }
+            }
 
             Cons => {
                 let head = Rc::clone(&args[0]);

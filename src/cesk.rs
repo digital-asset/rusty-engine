@@ -212,6 +212,7 @@ impl<'a> State<'a> {
                     PrimLit::Nil => Value::Nil,
                     PrimLit::None => Value::None,
                     PrimLit::Int64(i) => Value::Int64(*i),
+                    PrimLit::Numeric(d) => Value::Numeric(d.clone()),
                     PrimLit::Text(s) => Value::Text(s.clone()),
                     PrimLit::MapEmpty => Value::Map(FnvHashMap::default()),
                     PrimLit::Unsupported(msg) => panic!("PrimLit::Unsupported({})", msg),
@@ -351,7 +352,9 @@ impl<'a> State<'a> {
         args: &[Rc<Value<'a>>],
     ) -> Ctrl<'a> {
         match prim {
-            Prim::Builtin(Builtin::TextToText) => Ctrl::Value(Rc::clone(&args[0])),
+            Prim::Builtin(Builtin::CastNumeric) | Prim::Builtin(Builtin::TextToText) => {
+                Ctrl::Value(Rc::clone(&args[0]))
+            }
             // TODO(MH): There's plenty of room for optimizations in foldr
             // and foldl, but let's get something simple and correct first.
             Prim::Builtin(Builtin::Foldr) => {

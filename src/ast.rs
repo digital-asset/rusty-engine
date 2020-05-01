@@ -1,5 +1,6 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+use bigdecimal::BigDecimal;
 use fnv::FnvHashMap;
 use protobuf::SingularPtrField;
 use std::collections::HashMap;
@@ -251,6 +252,21 @@ pub enum Builtin {
     LessInt64,
     GreaterInt64,
 
+    // Numeric arithmetic
+    AddNumeric,
+    SubNumeric,
+    MulNumeric,
+    DivNumeric,
+    CastNumeric,
+    ShiftNumeric,
+
+    // Numeric comparison
+    EqualNumeric,
+    LeqNumeric,
+    GeqNumeric,
+    LessNumeric,
+    GreaterNumeric,
+
     // Text operations
     AppendText,
     ImplodeText,
@@ -301,6 +317,7 @@ pub enum Builtin {
 
     // Conversion to text
     Int64ToText,
+    NumericToText,
     TextToText,
     PartyToText,
     PartyToQuotedText,
@@ -309,8 +326,13 @@ pub enum Builtin {
 
     // Conversion from text
     Int64FromText,
+    NumericFromText,
     PartyFromText,
     GetParty,
+
+    // Conversions
+    Int64ToNumeric,
+    NumericToInt64,
 
     // List operations
     Cons,
@@ -351,6 +373,19 @@ impl Builtin {
             GEQ_INT64 => GeqInt64,
             LESS_INT64 => LessInt64,
             GREATER_INT64 => GreaterInt64,
+
+            ADD_NUMERIC => AddNumeric,
+            SUB_NUMERIC => SubNumeric,
+            MUL_NUMERIC => MulNumeric,
+            DIV_NUMERIC => DivNumeric,
+            CAST_NUMERIC => CastNumeric,
+            SHIFT_NUMERIC => ShiftNumeric,
+
+            EQUAL_NUMERIC => EqualNumeric,
+            LEQ_NUMERIC => LeqNumeric,
+            GEQ_NUMERIC => GeqNumeric,
+            LESS_NUMERIC => LessNumeric,
+            GREATER_NUMERIC => GreaterNumeric,
 
             APPEND_TEXT => AppendText,
             IMPLODE_TEXT => ImplodeText,
@@ -393,6 +428,7 @@ impl Builtin {
             UNIX_DAYS_TO_DATE => DateFromDaysSinceEpoch,
 
             TO_TEXT_INT64 => Int64ToText,
+            TO_TEXT_NUMERIC => NumericToText,
             TO_TEXT_TEXT => TextToText,
             TO_TEXT_PARTY => PartyToText,
             TO_QUOTED_TEXT_PARTY => PartyToQuotedText,
@@ -400,7 +436,11 @@ impl Builtin {
             TO_TEXT_DATE => DateToText,
 
             FROM_TEXT_INT64 => Int64FromText,
+            FROM_TEXT_NUMERIC => NumericFromText,
             FROM_TEXT_PARTY => PartyFromText,
+
+            INT64_TO_NUMERIC => Int64ToNumeric,
+            NUMERIC_TO_INT64 => NumericToInt64,
 
             FOLDR => Foldr,
             FOLDL => Foldl,
@@ -419,14 +459,13 @@ impl Builtin {
             ADD_DECIMAL | SUB_DECIMAL | MUL_DECIMAL | DIV_DECIMAL | ROUND_DECIMAL
             | EQUAL_DECIMAL | LEQ_DECIMAL | LESS_DECIMAL | GEQ_DECIMAL | GREATER_DECIMAL
             | TO_TEXT_DECIMAL | FROM_TEXT_DECIMAL | INT64_TO_DECIMAL | DECIMAL_TO_INT64
-            | ADD_NUMERIC | SUB_NUMERIC | MUL_NUMERIC | DIV_NUMERIC | ROUND_NUMERIC
-            | CAST_NUMERIC | SHIFT_NUMERIC | GENMAP_EMPTY | GENMAP_INSERT | GENMAP_LOOKUP
-            | GENMAP_DELETE | GENMAP_KEYS | GENMAP_VALUES | GENMAP_SIZE | EQUAL_NUMERIC
-            | LEQ_NUMERIC | LESS_NUMERIC | GEQ_NUMERIC | GREATER_NUMERIC | TO_TEXT_NUMERIC
-            | FROM_TEXT_NUMERIC | INT64_TO_NUMERIC | NUMERIC_TO_INT64 | EQUAL_TYPE_REP | EQUAL
-            | LESS_EQ | LESS | GREATER_EQ | GREATER | TEXT_TO_UPPER | TEXT_TO_LOWER
-            | TEXT_SLICE | TEXT_SLICE_INDEX | TEXT_CONTAINS_ONLY | TEXT_REPLICATE
-            | TEXT_SPLIT_ON | TEXT_INTERCALATE => Unsupported(proto),
+            | ROUND_NUMERIC | GENMAP_EMPTY | GENMAP_INSERT | GENMAP_LOOKUP
+            | GENMAP_DELETE | GENMAP_KEYS | GENMAP_VALUES | GENMAP_SIZE
+            | EQUAL_TYPE_REP | EQUAL | LESS_EQ | LESS | GREATER_EQ | GREATER
+            | TEXT_TO_UPPER | TEXT_TO_LOWER | TEXT_SLICE | TEXT_SLICE_INDEX
+            | TEXT_CONTAINS_ONLY | TEXT_REPLICATE | TEXT_SPLIT_ON | TEXT_INTERCALATE => {
+                Unsupported(proto)
+            }
 
             // Misc
             TRACE => Unsupported(proto),
@@ -441,6 +480,7 @@ pub enum PrimLit {
     Nil,
     None,
     Int64(i64),
+    Numeric(BigDecimal),
     Text(String),
     MapEmpty,
     Unsupported(&'static str),
@@ -452,7 +492,11 @@ impl PrimLit {
         match proto.Sum.unwrap() {
             int64(x) => PrimLit::Int64(x),
             decimal_str(_) => PrimLit::Unsupported("PrimLit::Decimal"),
-            numeric_interned_str(_) => PrimLit::Unsupported("PrimLit::Numeric"),
+            numeric_interned_str(id) => PrimLit::Numeric(
+                env.get_interned_string(id)
+                    .parse()
+                    .expect("Badly formatted Numeric"),
+            ),
             text_str(x) => PrimLit::Text(x),
             text_interned_str(id) => PrimLit::Text(env.get_interned_string(id)),
             timestamp(_) => PrimLit::Unsupported("PrimLit::Timestamp"),
