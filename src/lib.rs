@@ -1,5 +1,6 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+#![allow(clippy::new_without_default)]
 mod ast;
 mod builtin;
 mod cesk;
