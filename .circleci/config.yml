@@ -37,6 +37,9 @@ jobs:
       - run:
           name: Test
           command: cargo test --all --all-targets --locked
+      - run:
+          name: Benchmark
+          command: cargo bench --locked
       - save_cache:
           name: Save Rust cache
           paths:
