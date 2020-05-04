@@ -11,6 +11,9 @@ use std::io::*;
 use crate::protos::da::daml_lf;
 use crate::protos::da::daml_lf_1;
 
+mod closure_conversion;
+mod iter;
+
 mod debruijn {
     use super::{Binder, PackageId};
     use std::borrow::Borrow;
@@ -665,6 +668,7 @@ pub enum Expr {
     },
     Lam {
         params: Vec<Binder>,
+        captured: Vec<usize>,
         body: Box<Expr>,
     },
     Case {
@@ -882,13 +886,18 @@ impl Expr {
                     .into_iter()
                     .map(|x| var_with_type_from_proto(x.var, env))
                     .collect();
+                let captured = Vec::new();
                 let body = {
                     env.push_many(&params);
                     let body = Self::boxed_from_proto(x.body, env);
                     env.pop_many(&params);
                     body
                 };
-                Expr::Lam { params, body }
+                Expr::Lam {
+                    params,
+                    captured,
+                    body,
+                }
             }
             ty_abs(x) => {
                 use daml_lf_1::TypeVarWithKind_oneof_var::*;
@@ -921,6 +930,7 @@ impl Expr {
                     .into_iter()
                     .filter_map(|(binder, is_nat)| if is_nat { Some(binder) } else { None })
                     .collect();
+                let captured = Vec::new();
                 // TODO(MH): Once we've implemented a pass to merge adjacent
                 // `Expr::Lam`s, we can always return the else case here.
                 if params.is_empty() {
@@ -928,6 +938,7 @@ impl Expr {
                 } else {
                     Expr::Lam {
                         params,
+                        captured,
                         body: Box::new(body),
                     }
                 }
@@ -1017,6 +1028,7 @@ impl Expr {
                 env.pop(&param);
                 Expr::Lam {
                     params: vec![param],
+                    captured: Vec::new(),
                     body: Box::new(body),
                 }
             }
@@ -1047,6 +1059,7 @@ impl Expr {
                 env.pop(&param);
                 Expr::Lam {
                     params: vec![param],
+                    captured: Vec::new(),
                     body: Box::new(body),
                 }
             }
@@ -1277,7 +1290,7 @@ impl DefValue {
             panic!("items and id both set for internable string list")
         };
         let location = Location::from_proto(proto.location, env);
-        let expr = Expr::from_proto(proto.expr, env);
+        let expr = Expr::from_proto(proto.expr, env).closure_convert();
         let is_test = proto.is_test;
         DefValue {
             name,
@@ -1414,10 +1427,10 @@ impl Choice {
         };
         let arg_binder = var_with_type_from_proto(proto.arg_binder.unwrap().var, env);
         env.push(&arg_binder);
-        let controllers = Expr::from_proto(proto.controllers, env);
+        let controllers = Expr::from_proto(proto.controllers, env).closure_convert();
         env.pop(&arg_binder);
         env.push_many(vec![&self_binder, &arg_binder]);
-        let consequence = Expr::from_proto(proto.update, env);
+        let consequence = Expr::from_proto(proto.update, env).closure_convert();
         env.pop_many(&[&self_binder, &arg_binder]);
         Choice {
             name,
@@ -1462,9 +1475,9 @@ impl DefTemplate {
             param_interned_str(id) => env.get_interned_string(id),
         };
         env.push(&this_binder);
-        let precondtion = Expr::from_proto(proto.precond, env);
-        let signatories = Expr::from_proto(proto.signatories, env);
-        let observers = Expr::from_proto(proto.observers, env);
+        let precondtion = Expr::from_proto(proto.precond, env).closure_convert();
+        let signatories = Expr::from_proto(proto.signatories, env).closure_convert();
+        let observers = Expr::from_proto(proto.observers, env).closure_convert();
         let choices = proto
             .choices
             .into_iter()

@@ -27,7 +27,7 @@ impl<'a> fmt::Display for Error<'a> {
 #[derive(Debug)]
 pub enum Prim<'a> {
     Builtin(Builtin),
-    Lam(&'a Expr, Env<'a>),
+    Lam(&'a Expr, Rc<Vec<Rc<Value<'a>>>>),
     RecCon(&'a TypeConRef, &'a Vec<String>),
     RecProj(&'a TypeConRef, &'a String),
     RecUpd(&'a TypeConRef, &'a String),
@@ -114,7 +114,7 @@ impl<'a> Ctrl<'a> {
                 missing,
             }) => match prim {
                 Prim::Builtin(builtin) => Rc::new(Value::PAP(builtin, args, missing)),
-                Prim::Lam(body, env) => Rc::new(Value::Lam(body, env, args, missing)),
+                Prim::Lam(body, captured) => Rc::new(Value::Lam(body, captured, args, missing)),
                 _ => panic!("Putting bad prim in heap: {:?}", prim),
             },
             _ => panic!("expected value, found {:?}", self),
@@ -129,8 +129,8 @@ impl<'a> Ctrl<'a> {
                     args: args.clone(),
                     missing: *missing,
                 },
-                Value::Lam(body, env, args, missing) => PAP {
-                    prim: Prim::Lam(body, env.clone()),
+                Value::Lam(body, captured, args, missing) => PAP {
+                    prim: Prim::Lam(body, Rc::clone(captured)),
                     args: args.clone(),
                     missing: *missing,
                 },
@@ -271,8 +271,18 @@ impl<'a> State<'a> {
                 Ctrl::Expr(fun)
             }
 
-            Expr::Lam { params, body } => {
-                Ctrl::from_prim(Prim::Lam(body, self.env.clone()), params.len())
+            Expr::Lam {
+                params,
+                captured,
+                body,
+            } => {
+                let captured = Rc::new(
+                    captured
+                        .iter()
+                        .map(|index| Rc::clone(self.env.get(*index)))
+                        .collect(),
+                );
+                Ctrl::from_prim(Prim::Lam(body, captured), params.len())
             }
 
             Expr::Case { scrut, alts } => {
@@ -442,8 +452,9 @@ impl<'a> State<'a> {
             Prim::VariantCon(tycon, con) => {
                 Ctrl::from_value(Value::VariantCon(tycon, con, Rc::clone(&args[0])))
             }
-            Prim::Lam(body, env) => {
-                let mut new_env = env.clone();
+            Prim::Lam(body, captured) => {
+                let mut new_env = Env::new();
+                new_env.push_many(captured);
                 new_env.push_many(args);
                 let old_env = std::mem::replace(&mut self.env, new_env);
                 self.kont.push(Kont::Dump(old_env));

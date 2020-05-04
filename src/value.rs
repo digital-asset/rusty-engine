@@ -47,7 +47,7 @@ pub enum Value<'a> {
     Map(FnvHashMap<String, Rc<Value<'a>>>),
     Token, // The "real world" token for the `Update` monad.
     PAP(Builtin, Vec<Rc<Value<'a>>>, usize),
-    Lam(&'a Expr, Env<'a>, Vec<Rc<Value<'a>>>, usize),
+    Lam(&'a Expr, Rc<Vec<Rc<Value<'a>>>>, Vec<Rc<Value<'a>>>, usize),
 }
 
 #[derive(Debug)]
