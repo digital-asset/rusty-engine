@@ -1289,6 +1289,99 @@ impl DefValue {
 }
 
 #[derive(Debug)]
+pub enum DataCons {
+    Record { fields: Vec<String> },
+    Variant { constructors: Vec<String> },
+    Enum { constructors: Vec<String> },
+}
+
+impl DataCons {
+    fn from_proto(proto: daml_lf_1::DefDataType_oneof_DataCons, env: &Env) -> Self {
+        use daml_lf_1::DefDataType_oneof_DataCons::*;
+        match proto {
+            record(x) => {
+                use daml_lf_1::FieldWithType_oneof_field::*;
+                let fields = x
+                    .fields
+                    .into_iter()
+                    .map(|y| match y.field.unwrap() {
+                        field_str(name) => name,
+                        field_interned_str(id) => env.get_interned_string(id),
+                    })
+                    .collect();
+                DataCons::Record { fields }
+            }
+            variant(x) => {
+                use daml_lf_1::FieldWithType_oneof_field::*;
+                let constructors = x
+                    .fields
+                    .into_iter()
+                    .map(|y| match y.field.unwrap() {
+                        field_str(name) => name,
+                        field_interned_str(id) => env.get_interned_string(id),
+                    })
+                    .collect();
+                DataCons::Variant { constructors }
+            }
+            field_enum(x) => {
+                let constructors = match (
+                    x.constructors_str.is_empty(),
+                    x.constructors_interned_str.is_empty(),
+                ) {
+                    (true, true) => Vec::new(),
+                    (true, false) => x
+                        .constructors_interned_str
+                        .into_iter()
+                        .map(|id| env.get_interned_string(id))
+                        .collect(),
+                    (false, true) => x.constructors_str.into_vec(),
+                    (false, false) => panic!("enum with interned and non-interned constructors"),
+                };
+                DataCons::Enum { constructors }
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct DefDataType {
+    pub name: String,
+    pub location: Option<Location>,
+    pub params: Vec<Binder>,
+    pub cons: DataCons,
+    pub is_serializable: bool,
+}
+
+impl DefDataType {
+    fn from_proto(proto: daml_lf_1::DefDataType, env: &Env) -> Self {
+        use daml_lf_1::DefDataType_oneof_name::*;
+        use daml_lf_1::TypeVarWithKind_oneof_var::*;
+        let name = match proto.name.unwrap() {
+            name_dname(dotted_name) => dotted_name_from_proto(dotted_name),
+            name_interned_dname(id) => env.get_interned_dotted_name(id),
+        };
+        let location = Location::from_proto(proto.location, env);
+        let params = proto
+            .params
+            .into_iter()
+            .map(|param| match param.var.unwrap() {
+                var_str(name) => name,
+                var_interned_str(id) => env.get_interned_string(id),
+            })
+            .collect();
+        let cons = DataCons::from_proto(proto.DataCons.unwrap(), env);
+        let is_serializable = proto.serializable;
+        Self {
+            name,
+            location,
+            params,
+            cons,
+            is_serializable,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Choice {
     pub name: String,
     pub location: Option<Location>,
@@ -1400,6 +1493,7 @@ pub struct Module {
     pub self_ref: ModuleRef,
     pub values: FnvHashMap<String, DefValue>,
     templates: FnvHashMap<String, DefTemplate>,
+    data_types: FnvHashMap<String, DefDataType>,
 }
 
 impl Module {
@@ -1429,11 +1523,20 @@ impl Module {
                 (template.name.clone(), template)
             })
             .collect();
+        let data_types = proto
+            .data_types
+            .into_iter()
+            .map(|x| {
+                let data_type = DefDataType::from_proto(x, env);
+                (data_type.name.clone(), data_type)
+            })
+            .collect();
         Module {
             name,
             self_ref,
             values,
             templates,
+            data_types,
         }
     }
 }
