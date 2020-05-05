@@ -12,18 +12,6 @@ pub use crate::ast::{DefValue, Module, World};
 pub use crate::cesk::State;
 pub use crate::store::Store;
 
-use crate::ast::{Expr, ModuleRef};
-
-pub fn make_entry_point(world: &World, module_name: String, scenario_name: String) -> Expr {
-    Expr::Val {
-        module_ref: ModuleRef {
-            package_id: world.main.clone(),
-            module_name,
-        },
-        name: scenario_name,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -41,7 +29,7 @@ mod tests {
                 let test_name = format!("{}:{}", module.name, value.name);
                 println!("Test:   {}", test_name);
                 let mut store = Store::new();
-                let entry_point = make_entry_point(&world, module.name.clone(), value.name.clone());
+                let entry_point = world.entry_point(&module.name, &value.name);
                 let state = State::new(&entry_point, &world, &mut store);
                 let result = state.run();
 

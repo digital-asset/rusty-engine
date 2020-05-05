@@ -34,8 +34,8 @@ fn main() -> std::io::Result<()> {
             println!("Test:      {}", test_name);
             let start = Instant::now();
             let mut store = Store::new();
-            let entry_point = make_entry_point(&world, module.name.clone(), value.name.clone());
-            let state = State::new(&entry_point, &world, &mut store);
+            let entry_point = world.entry_point(&module.name, &value.name);
+            let state = State::new(entry_point, &world, &mut store);
             let result = state.run();
             let duration = start.elapsed();
             let (active, archived) = store.stats();
