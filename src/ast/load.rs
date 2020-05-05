@@ -4,7 +4,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::io::*;
 
-use super::{Package, World};
+use super::{Expr, ModuleRef, Package, World};
 
 impl Package {
     fn load<R: Read>(reader: &mut R) -> Result<Self> {
@@ -46,13 +46,60 @@ impl World {
             .collect();
         let map_entry_fields = vec!["key".to_string(), "value".to_string()];
         let numeric_regex = Regex::new(r"^[\+-]?\d+(\.\d+)?$").unwrap();
-        let world = World {
+        let mut world = World {
             main,
             packages,
+            num_values: 0,
             map_entry_fields,
             numeric_regex,
         };
+        world.index_values();
         Ok(world)
+    }
+
+    fn index_values(&mut self) {
+        fn rewrite_expr(
+            expr: &mut Expr,
+            value_indices: &HashMap<ModuleRef, HashMap<String, usize>>,
+        ) {
+            match expr {
+                Expr::Val {
+                    module_ref,
+                    name,
+                    index,
+                } => {
+                    *index = *value_indices.get(module_ref).unwrap().get(name).unwrap();
+                }
+                _ => {
+                    for child in expr.children_mut() {
+                        rewrite_expr(child, value_indices);
+                    }
+                }
+            }
+        }
+
+        let mut value_indices = HashMap::new();
+        let mut value_index = 0;
+        for module in self
+            .packages
+            .values_mut()
+            .flat_map(|package| package.modules.values_mut())
+        {
+            let mut value_indices_in_module = HashMap::new();
+            for value in module.values.values_mut() {
+                value_indices_in_module.insert(value.name.clone(), value_index);
+                value.index = value_index;
+                if let Expr::Val { index, .. } = &mut value.self_ref {
+                    *index = value_index;
+                }
+                value_index += 1;
+            }
+            value_indices.insert(module.self_ref.clone(), value_indices_in_module);
+        }
+        self.num_values = value_index;
+        for expr in self.exprs_mut() {
+            rewrite_expr(expr, &value_indices);
+        }
     }
 }
 

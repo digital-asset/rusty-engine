@@ -1,6 +1,8 @@
 // Copyright (c) 2020 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-use super::{Alt, Expr};
+use std::iter;
+
+use super::*;
 
 pub struct ChildrenMut<'a> {
     expr1: Option<&'a mut Expr>,
@@ -38,7 +40,7 @@ impl<'a> Iterator for ChildrenMut<'a> {
 }
 
 impl Expr {
-    pub fn children_mut(&mut self) -> ChildrenMut {
+    pub fn children_mut(&mut self) -> impl Iterator<Item = &mut Expr> {
         use Expr::*;
         match self {
             Var { .. }
@@ -92,5 +94,47 @@ impl Expr {
                 alts: alts.iter_mut(),
             },
         }
+    }
+}
+
+impl DefValue {
+    pub fn exprs_mut(&mut self) -> impl Iterator<Item = &mut Expr> {
+        iter::once(&mut self.expr)
+    }
+}
+
+impl Choice {
+    pub fn exprs_mut(&mut self) -> impl Iterator<Item = &mut Expr> {
+        iter::once(&mut self.controllers).chain(iter::once(&mut self.consequence))
+    }
+}
+
+impl DefTemplate {
+    pub fn exprs_mut(&mut self) -> impl Iterator<Item = &mut Expr> {
+        iter::once(&mut self.precondtion)
+            .chain(iter::once(&mut self.signatories))
+            .chain(iter::once(&mut self.observers))
+            .chain(self.choices.values_mut().flat_map(Choice::exprs_mut))
+    }
+}
+
+impl Module {
+    pub fn exprs_mut(&mut self) -> impl Iterator<Item = &mut Expr> {
+        self.values
+            .values_mut()
+            .flat_map(DefValue::exprs_mut)
+            .chain(self.templates.values_mut().flat_map(DefTemplate::exprs_mut))
+    }
+}
+
+impl Package {
+    pub fn exprs_mut(&mut self) -> impl Iterator<Item = &mut Expr> {
+        self.modules.values_mut().flat_map(Module::exprs_mut)
+    }
+}
+
+impl World {
+    pub fn exprs_mut(&mut self) -> impl Iterator<Item = &mut Expr> {
+        self.packages.values_mut().flat_map(Package::exprs_mut)
     }
 }
