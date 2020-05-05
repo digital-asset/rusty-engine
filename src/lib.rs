@@ -42,8 +42,8 @@ mod tests {
                 println!("Test:   {}", test_name);
                 let mut store = Store::new();
                 let entry_point = make_entry_point(&world, module.name.clone(), value.name.clone());
-                let state = State::init(&entry_point);
-                let result = state.run(&world, &mut store);
+                let state = State::new(&entry_point, &world, &mut store);
+                let result = state.run();
 
                 let expected_failure = expected_failures.get(&(&module.name, &value.name));
                 match (result, expected_failure) {

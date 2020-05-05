@@ -92,12 +92,14 @@ enum Mode {
 }
 
 #[derive(Debug)]
-pub struct State<'a> {
+pub struct State<'a, 'store> {
     ctrl: Ctrl<'a>,
     env: Env<'a>,
     kont: Vec<Kont<'a>>,
     time: Time,
     mode: Mode,
+    world: &'a World,
+    store: &'store mut Store<'a>,
 }
 
 impl<'a> Ctrl<'a> {
@@ -176,19 +178,21 @@ impl Mode {
     }
 }
 
-impl<'a> State<'a> {
-    pub fn init(expr: &'a Expr) -> Self {
+impl<'a, 'store> State<'a, 'store> {
+    pub fn new(entry_point: &'a Expr, world: &'a World, store: &'store mut Store<'a>) -> Self {
         State {
-            ctrl: Ctrl::Expr(expr),
+            ctrl: Ctrl::Expr(entry_point),
             env: Env::new(),
             kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
             mode: Mode::Scenario,
             time: Time::EPOCH,
+            world,
+            store,
         }
     }
 
     /// Step when the control contains an expression.
-    fn step_expr(&mut self, world: &'a World, ctrl_expr: &'a Expr) -> Ctrl<'a> {
+    fn step_expr(&mut self, ctrl_expr: &'a Expr) -> Ctrl<'a> {
         match ctrl_expr {
             Expr::Var { index, .. } => {
                 let v = self.env.get(*index);
@@ -199,7 +203,7 @@ impl<'a> State<'a> {
                 let new_env = Env::new();
                 let old_env = std::mem::replace(&mut self.env, new_env);
                 self.kont.push(Kont::Dump(old_env));
-                let def = world.get_value(module_ref, name);
+                let def = self.world.get_value(module_ref, name);
                 Ctrl::Expr(&def.expr)
             }
 
@@ -303,7 +307,7 @@ impl<'a> State<'a> {
                 template_ref,
                 payload,
             } => {
-                let template = world.get_template(template_ref);
+                let template = self.world.get_template(template_ref);
                 self.kont.push(Kont::Arg(payload));
                 Ctrl::from_prim(Prim::CreateCall(template), 1)
             }
@@ -320,7 +324,7 @@ impl<'a> State<'a> {
                 contract_id,
                 arg,
             } => {
-                let template = world.get_template(template_ref);
+                let template = self.world.get_template(template_ref);
                 let choice = template.choices.get::<String>(choice).unwrap();
                 self.kont.push(Kont::Arg(arg));
                 self.kont.push(Kont::Arg(contract_id));
@@ -357,7 +361,6 @@ impl<'a> State<'a> {
     fn step_saturated_prim(
         &mut self,
         world: &'a World,
-        store: &mut Store<'a>,
         prim: &Prim<'a>,
         args: &[Rc<Value<'a>>],
     ) -> Ctrl<'a> {
@@ -500,7 +503,7 @@ impl<'a> State<'a> {
                     let mut witnesses = update_mode.witnesses.clone();
                     witnesses.extend(observers.iter().cloned());
 
-                    let contract_id = store.create(Contract {
+                    let contract_id = self.store.create(Contract {
                         template_ref: &template.self_ref,
                         payload,
                         signatories,
@@ -513,7 +516,7 @@ impl<'a> State<'a> {
             Prim::Fetch(template_ref) => Ctrl::catch(|| {
                 let update_mode = self.mode.as_update_mode();
                 let contract_id = args[0].as_contract_id();
-                let contract = store.fetch(
+                let contract = self.store.fetch(
                     &update_mode.submitter,
                     &update_mode.witnesses,
                     template_ref,
@@ -533,7 +536,7 @@ impl<'a> State<'a> {
             Prim::ExerciseCall(choice) => Ctrl::catch(|| {
                 let update_mode = self.mode.as_update_mode();
                 let contract_id = &args[0];
-                let contract = store.fetch(
+                let contract = self.store.fetch(
                     &update_mode.submitter,
                     &update_mode.witnesses,
                     &choice.template_ref,
@@ -566,7 +569,7 @@ impl<'a> State<'a> {
                         arg,
                     ))
                 } else {
-                    let contract = store.fetch(
+                    let contract = self.store.fetch(
                         &update_mode.submitter,
                         &update_mode.witnesses,
                         &choice.template_ref,
@@ -579,7 +582,7 @@ impl<'a> State<'a> {
 
                     if choice.consuming {
                         new_witnesses.extend(contract.observers.iter().cloned());
-                        store.archive(
+                        self.store.archive(
                             &update_mode.submitter,
                             &update_mode.witnesses,
                             &choice.template_ref,
@@ -608,7 +611,7 @@ impl<'a> State<'a> {
                 authorizers.insert(submitter.clone());
                 let witnesses = authorizers.clone();
                 let update = Rc::clone(&args[1]);
-                let mut state = State {
+                let state = State {
                     ctrl: Ctrl::Value(update),
                     env: Env::new(),
                     kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
@@ -618,15 +621,14 @@ impl<'a> State<'a> {
                         witnesses,
                     }),
                     time: self.time,
+                    world: self.world,
+                    store: self.store,
                 };
-                while !state.is_final() {
-                    state.step(&world, store);
-                }
-                let result = state.get_result();
+                let result = state.run();
                 match result {
                     Ok(value) => {
                         if *should_succeed {
-                            store.commit();
+                            self.store.commit();
                             Ctrl::Value(value)
                         } else {
                             Ctrl::Error(String::from("unexpected success"))
@@ -636,7 +638,7 @@ impl<'a> State<'a> {
                         if *should_succeed {
                             Ctrl::Error(err.message)
                         } else {
-                            store.rollback();
+                            self.store.rollback();
                             Ctrl::from_value(Value::Unit)
                         }
                     }
@@ -765,18 +767,18 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn step(&mut self, world: &'a World, store: &mut Store<'a>) {
+    pub fn step(&mut self) {
         let old_ctrl = std::mem::replace(&mut self.ctrl, Ctrl::Evaluating);
 
         let new_ctrl = match old_ctrl {
             Ctrl::Evaluating => panic!("Control was not updated after last step"),
             Ctrl::Error(msg) => panic!("Interpretation continues after error: {}", msg),
 
-            Ctrl::Expr(expr) => self.step_expr(world, expr),
+            Ctrl::Expr(expr) => self.step_expr(expr),
 
             Ctrl::Value(ref value) => {
                 if let Value::PAP(prim, ref args, 0) = **value {
-                    self.step_saturated_prim(world, store, &Prim::Builtin(prim), args)
+                    self.step_saturated_prim(self.world, &Prim::Builtin(prim), args)
                 } else {
                     self.step_value(old_ctrl)
                 }
@@ -787,7 +789,7 @@ impl<'a> State<'a> {
                 missing,
             }) => {
                 if missing == 0 {
-                    self.step_saturated_prim(world, store, prim, args)
+                    self.step_saturated_prim(self.world, prim, args)
                 } else {
                     self.step_value(old_ctrl)
                 }
@@ -830,13 +832,9 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn run(
-        mut self,
-        world: &'a World,
-        store: &mut Store<'a>,
-    ) -> Result<Rc<Value<'a>>, Error<'a>> {
+    pub fn run(mut self) -> Result<Rc<Value<'a>>, Error<'a>> {
         while !self.is_final() {
-            self.step(&world, store);
+            self.step();
         }
         self.get_result()
     }
