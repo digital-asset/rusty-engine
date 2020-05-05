@@ -391,6 +391,7 @@ pub struct Package {
     pub modules: FnvHashMap<String, Module>,
 }
 
+#[derive(Debug)]
 pub struct World {
     pub main: PackageId,
     packages: FnvHashMap<PackageId, Package>,

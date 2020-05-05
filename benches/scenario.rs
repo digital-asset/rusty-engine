@@ -36,8 +36,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 let mut store = Store::new();
                 let entry_point =
                     make_entry_point(&world, String::from(*module), String::from(*scenario));
-                let state = State::init(&entry_point);
-                let _result = state.run(&world, &mut store);
+                let state = State::new(&entry_point, &world, &mut store);
+                let _result = state.run();
             })
         },
     );
