@@ -4,9 +4,11 @@ use bigdecimal::BigDecimal;
 use fnv::FnvHashMap;
 use regex::Regex;
 use std::fmt;
+use std::rc::Rc;
 
 use crate::protos::da::daml_lf;
 use crate::protos::da::daml_lf_1;
+use crate::value::Value;
 
 mod closure_conversion;
 mod debruijn;
@@ -18,7 +20,7 @@ pub type Binder = String;
 
 pub type PackageId = String;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ModuleRef {
     pub package_id: PackageId,
     pub module_name: String,
@@ -243,6 +245,7 @@ pub enum Expr {
     Val {
         module_ref: ModuleRef,
         name: String,
+        index: usize,
     },
     Builtin(Builtin),
     PrimLit(PrimLit),
@@ -332,8 +335,10 @@ pub enum Expr {
 pub struct DefValue {
     pub name: String,
     pub location: Option<Location>,
+    pub self_ref: Expr,
     pub expr: Expr,
     pub is_test: bool,
+    pub index: usize,
 }
 
 #[derive(Debug)]
@@ -395,6 +400,7 @@ pub struct Package {
 pub struct World {
     pub main: PackageId,
     packages: FnvHashMap<PackageId, Package>,
+    pub num_values: usize,
     pub map_entry_fields: Vec<String>,
     pub numeric_regex: Regex,
 }
@@ -422,5 +428,19 @@ impl World {
             .templates
             .get(&template_ref.name)
             .unwrap()
+    }
+
+    pub fn entry_point(&self, module_name: &str, scenario_name: &str) -> &Expr {
+        let module_ref = ModuleRef {
+            package_id: self.main.clone(),
+            module_name: module_name.to_owned(),
+        };
+        &self.get_value(&module_ref, scenario_name).self_ref
+    }
+
+    pub fn empty_value_cache(&self) -> Vec<Option<Rc<Value>>> {
+        let mut cache = Vec::new();
+        cache.resize_with(self.num_values, || None);
+        cache
     }
 }

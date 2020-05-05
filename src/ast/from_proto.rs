@@ -337,7 +337,11 @@ impl Expr {
                 } else {
                     panic!("items and id both set for internable string list")
                 };
-                Expr::Val { module_ref, name }
+                Expr::Val {
+                    module_ref,
+                    name,
+                    index: usize::MAX,
+                }
             }
             builtin(daml_lf_1::BuiltinFunction::TEXTMAP_EMPTY) => Expr::PrimLit(PrimLit::MapEmpty),
             builtin(x) => Expr::Builtin(Builtin::from_proto(x)),
@@ -849,7 +853,7 @@ impl Expr {
 }
 
 impl DefValue {
-    fn from_proto(proto: daml_lf_1::DefValue, env: &mut Env) -> Self {
+    fn from_proto(proto: daml_lf_1::DefValue, module_ref: &ModuleRef, env: &mut Env) -> Self {
         let name_with_type = proto.name_with_type.unwrap();
         let name = if name_with_type.name_dname.len() == 0 {
             env.get_interned_dotted_name(name_with_type.name_interned_dname)
@@ -859,13 +863,20 @@ impl DefValue {
             panic!("items and id both set for internable string list")
         };
         let location = Location::from_proto(proto.location, env);
+        let self_ref = Expr::Val {
+            module_ref: module_ref.clone(),
+            name: name.clone(),
+            index: usize::MAX,
+        };
         let expr = Expr::from_proto(proto.expr, env).closure_convert();
         let is_test = proto.is_test;
         DefValue {
             name,
             location,
+            self_ref,
             expr,
             is_test,
+            index: usize::MAX,
         }
     }
 }
@@ -1044,7 +1055,7 @@ impl Module {
             .values
             .into_iter()
             .map(|x| {
-                let y = DefValue::from_proto(x, env);
+                let y = DefValue::from_proto(x, &self_ref, env);
                 (y.name.clone(), y)
             })
             .collect();

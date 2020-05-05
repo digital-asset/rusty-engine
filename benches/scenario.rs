@@ -34,8 +34,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         |b, (world, module, scenario)| {
             b.iter(|| {
                 let mut store = Store::new();
-                let entry_point =
-                    make_entry_point(&world, String::from(*module), String::from(*scenario));
+                let entry_point = world.entry_point(module, scenario);
                 let state = State::new(&entry_point, &world, &mut store);
                 let _result = state.run();
             })

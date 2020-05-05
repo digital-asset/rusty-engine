@@ -75,6 +75,7 @@ enum Kont<'a> {
     Let(&'a Binder, &'a Expr),
     EqualList(Rc<Value<'a>>, ValueListIter<'a>, ValueListIter<'a>),
     Location(&'a Location),
+    Cache(usize),
 }
 
 #[derive(Debug)]
@@ -100,6 +101,7 @@ pub struct State<'a, 'store> {
     mode: Mode,
     world: &'a World,
     store: &'store mut Store<'a>,
+    value_cache: Vec<Option<Rc<Value<'a>>>>,
 }
 
 impl<'a> Ctrl<'a> {
@@ -188,6 +190,7 @@ impl<'a, 'store> State<'a, 'store> {
             time: Time::EPOCH,
             world,
             store,
+            value_cache: world.empty_value_cache(),
         }
     }
 
@@ -199,12 +202,21 @@ impl<'a, 'store> State<'a, 'store> {
                 Ctrl::Value(Rc::clone(&v))
             }
 
-            Expr::Val { module_ref, name } => {
-                let new_env = Env::new();
-                let old_env = std::mem::replace(&mut self.env, new_env);
-                self.kont.push(Kont::Dump(old_env));
-                let def = self.world.get_value(module_ref, name);
-                Ctrl::Expr(&def.expr)
+            Expr::Val {
+                module_ref,
+                name,
+                index,
+            } => {
+                if let Some(value) = &self.value_cache[*index] {
+                    Ctrl::Value(Rc::clone(value))
+                } else {
+                    let new_env = Env::new();
+                    let old_env = std::mem::replace(&mut self.env, new_env);
+                    self.kont.push(Kont::Cache(*index));
+                    self.kont.push(Kont::Dump(old_env));
+                    let def = self.world.get_value(module_ref, name);
+                    Ctrl::Expr(&def.expr)
+                }
             }
 
             Expr::Builtin(opcode) => Ctrl::from_prim(Prim::Builtin(*opcode), opcode.arity()),
@@ -611,7 +623,7 @@ impl<'a, 'store> State<'a, 'store> {
                 authorizers.insert(submitter.clone());
                 let witnesses = authorizers.clone();
                 let update = Rc::clone(&args[1]);
-                let state = State {
+                let mut state = State {
                     ctrl: Ctrl::Value(update),
                     env: Env::new(),
                     kont: vec![Kont::ArgVal(Rc::new(Value::Token))],
@@ -623,8 +635,11 @@ impl<'a, 'store> State<'a, 'store> {
                     time: self.time,
                     world: self.world,
                     store: self.store,
+                    value_cache: std::mem::take(&mut self.value_cache),
                 };
-                let result = state.run();
+                state.step_all();
+                std::mem::swap(&mut self.value_cache, &mut state.value_cache);
+                let result = state.get_result();
                 match result {
                     Ok(value) => {
                         if *should_succeed {
@@ -764,6 +779,11 @@ impl<'a, 'store> State<'a, 'store> {
                 }
             }
             Kont::Location(_location) => ctrl,
+            Kont::Cache(index) => {
+                let value = ctrl.into_value();
+                self.value_cache[index] = Some(Rc::clone(&value));
+                Ctrl::Value(value)
+            }
         }
     }
 
@@ -832,10 +852,14 @@ impl<'a, 'store> State<'a, 'store> {
         }
     }
 
-    pub fn run(mut self) -> Result<Rc<Value<'a>>, Error<'a>> {
+    fn step_all(&mut self) {
         while !self.is_final() {
             self.step();
         }
+    }
+
+    pub fn run(mut self) -> Result<Rc<Value<'a>>, Error<'a>> {
+        self.step_all();
         self.get_result()
     }
 
