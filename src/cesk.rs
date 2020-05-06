@@ -70,6 +70,7 @@ enum Kont<'a> {
     Pop(usize),
     Arg(&'a Expr),
     ArgVal(Rc<Value<'a>>),
+    ArgFAP(Prim<'a>, Vec<Rc<Value<'a>>>),
     Fun(PAP<'a>),
     Match(&'a Vec<Alt>),
     Let(&'a Binder, &'a Expr),
@@ -102,6 +103,12 @@ pub struct State<'a, 'store> {
     world: &'a World,
     store: &'store mut Store<'a>,
     value_cache: Vec<Option<Rc<Value<'a>>>>,
+}
+
+impl<'a> Default for Ctrl<'a> {
+    fn default() -> Self {
+        Self::Evaluating
+    }
 }
 
 impl<'a> Ctrl<'a> {
@@ -146,8 +153,10 @@ impl<'a> Ctrl<'a> {
     }
 
     fn from_prim(prim: Prim<'a>, arity: usize) -> Self {
+        debug_assert!(arity > 0);
         Ctrl::PAP(PAP {
             prim,
+            // FIXME(MH): Use Vec::with_capacity.
             args: Vec::new(),
             missing: arity,
         })
@@ -241,8 +250,13 @@ impl<'a, 'store> State<'a, 'store> {
                 fields,
                 exprs,
             } => {
-                self.kont.extend(exprs.iter().rev().map(Kont::Arg));
-                Ctrl::from_prim(Prim::RecCon(tycon, fields), exprs.len())
+                let arity = exprs.len();
+                if arity > 0 {
+                    self.kont.extend(exprs.iter().rev().map(Kont::Arg));
+                    Ctrl::from_prim(Prim::RecCon(tycon, fields), arity)
+                } else {
+                    Ctrl::from_value(Value::RecCon(tycon, fields, vec![]))
+                }
             }
 
             Expr::RecProj {
@@ -273,8 +287,13 @@ impl<'a, 'store> State<'a, 'store> {
             Expr::EnumCon { tycon, con } => Ctrl::from_value(Value::EnumCon(&tycon, &con)),
 
             Expr::TupleCon { fields, exprs } => {
-                self.kont.extend(exprs.iter().rev().map(Kont::Arg));
-                Ctrl::from_prim(Prim::TupleCon(fields), exprs.len())
+                let arity = exprs.len();
+                if arity > 0 {
+                    self.kont.extend(exprs.iter().rev().map(Kont::Arg));
+                    Ctrl::from_prim(Prim::TupleCon(fields), arity)
+                } else {
+                    Ctrl::from_value(Value::TupleCon(fields, vec![]))
+                }
             }
 
             Expr::TupleProj { field, tuple } => {
@@ -370,9 +389,8 @@ impl<'a, 'store> State<'a, 'store> {
     }
 
     /// Step when control contains a fully applied primitive.
-    fn step_saturated_prim(
+    fn interpret_prim(
         &mut self,
-        world: &'a World,
         prim: &Prim<'a>,
         args: &[Rc<Value<'a>>],
     ) -> Ctrl<'a> {
@@ -389,11 +407,9 @@ impl<'a, 'store> State<'a, 'store> {
                     // foldr f z (x::xs) = f x (foldr f z xs)
                     Value::Cons(x, xs) => {
                         let args2 = vec![Rc::clone(f), Rc::clone(z), Rc::clone(xs)];
-                        // NOTE(MH): Putting a fully applied `Prim` into
-                        // `ArgVal` is a bit sketchy since it prevents us from
-                        // assuming that `ArgVal` is a proper value.
-                        self.kont
-                            .push(Kont::ArgVal(Rc::new(Value::PAP(Builtin::Foldr, args2, 0))));
+                        // TODO(MH): This is the only use case for `Kont::ArgFAP`.
+                        // We should find something less special.
+                        self.kont.push(Kont::ArgFAP(Prim::Builtin(Builtin::Foldr), args2));
                         self.kont.push(Kont::ArgVal(Rc::clone(x)));
                         Ctrl::Value(Rc::clone(f))
                     }
@@ -431,7 +447,7 @@ impl<'a, 'store> State<'a, 'store> {
                 Ctrl::from_value(Value::Bool(true))
             }
             Prim::Builtin(opcode) => Ctrl::catch(|| {
-                let value = opcode.interpret(args, world)?;
+                let value = opcode.interpret(args, self.world)?;
                 Ok(Ctrl::from_value(value))
             }),
             Prim::RecCon(tycon, fields) => {
@@ -699,11 +715,19 @@ impl<'a, 'store> State<'a, 'store> {
                 self.kont.push(Kont::Fun(ctrl.into_pap()));
                 Ctrl::Value(arg)
             }
+            Kont::ArgFAP(prim, args) => {
+                self.kont.push(Kont::Fun(ctrl.into_pap()));
+                self.interpret_prim(&prim, &args)
+            }
             Kont::Fun(mut pap) => {
                 assert!(pap.missing > 0);
                 pap.args.push(ctrl.into_value());
-                pap.missing -= 1;
-                Ctrl::PAP(pap)
+                if pap.missing > 1 {
+                    pap.missing -= 1;
+                    Ctrl::PAP(pap)
+                } else {
+                    self.interpret_prim(&pap.prim, &pap.args)
+                }
             }
             Kont::Match(alts) => {
                 let value = ctrl.into_value();
@@ -787,47 +811,34 @@ impl<'a, 'store> State<'a, 'store> {
         }
     }
 
-    pub fn step(&mut self) {
-        let old_ctrl = std::mem::replace(&mut self.ctrl, Ctrl::Evaluating);
+    fn step(&mut self) {
+        let old_ctrl = std::mem::take(&mut self.ctrl);
 
         let new_ctrl = match old_ctrl {
             Ctrl::Evaluating => panic!("Control was not updated after last step"),
             Ctrl::Error(msg) => panic!("Interpretation continues after error: {}", msg),
-
             Ctrl::Expr(expr) => self.step_expr(expr),
-
-            Ctrl::Value(ref value) => {
-                if let Value::PAP(prim, ref args, 0) = **value {
-                    self.step_saturated_prim(self.world, &Prim::Builtin(prim), args)
-                } else {
-                    self.step_value(old_ctrl)
-                }
-            }
-            Ctrl::PAP(PAP {
-                ref prim,
-                ref args,
-                missing,
-            }) => {
-                if missing == 0 {
-                    self.step_saturated_prim(self.world, prim, args)
-                } else {
-                    self.step_value(old_ctrl)
-                }
-            }
+            Ctrl::Value(_) | Ctrl::PAP(_) => self.step_value(old_ctrl),
         };
 
         self.ctrl = new_ctrl
     }
 
-    pub fn is_final(&self) -> bool {
+    fn is_final(&self) -> bool {
+        debug_assert!({
+            match &self.ctrl {
+                Ctrl::Value(v) => match **v {
+                    Value::PAP(_, _, missing) => missing > 0,
+                    _ => true,
+                },
+                Ctrl::PAP(pap) => pap.missing > 0,
+                _ => true,
+            }
+        });
         match &self.ctrl {
-            Ctrl::Value(v) => match **v {
-                Value::PAP(_, _, 0) => false,
-                _ => self.kont.is_empty(),
-            },
-            Ctrl::PAP(pap) => pap.missing > 0 && self.kont.is_empty(),
+            Ctrl::Evaluating | Ctrl::Expr(_) => false,
+            Ctrl::Value(_) | Ctrl::PAP(_) => self.kont.is_empty(),
             Ctrl::Error(_) => true,
-            _ => false,
         }
     }
 
