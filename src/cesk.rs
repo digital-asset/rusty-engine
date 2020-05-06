@@ -389,7 +389,7 @@ impl<'a, 'store> State<'a, 'store> {
     }
 
     /// Step when control contains a fully applied primitive.
-    fn interpret_prim(&mut self, prim: &Prim<'a>, args: &[Rc<Value<'a>>]) -> Ctrl<'a> {
+    fn interpret_prim(&mut self, prim: Prim<'a>, args: Vec<Rc<Value<'a>>>) -> Ctrl<'a> {
         match prim {
             Prim::Builtin(Builtin::TextToText) => Ctrl::Value(Rc::clone(&args[0])),
             // TODO(MH): There's plenty of room for optimizations in foldr
@@ -452,7 +452,7 @@ impl<'a, 'store> State<'a, 'store> {
             }
             Prim::RecProj(_tycon, field) => {
                 if let Value::RecCon(_tycon, fields, vals) = &*args[0] {
-                    let idx = fields.iter().position(|x| x == *field).unwrap();
+                    let idx = fields.iter().position(|x| x == field).unwrap();
                     Ctrl::Value(Rc::clone(&vals[idx]))
                 } else {
                     panic!("RecProj not on RecCon")
@@ -460,7 +460,7 @@ impl<'a, 'store> State<'a, 'store> {
             }
             Prim::RecUpd(_tycon, field) => {
                 if let Value::RecCon(tycon, fields, vals) = &*args[0] {
-                    let idx = fields.iter().position(|x| x == *field).unwrap();
+                    let idx = fields.iter().position(|x| x == field).unwrap();
                     let mut vals = vals.clone();
                     vals[idx] = Rc::clone(&args[1]);
                     Ctrl::from_value(Value::RecCon(tycon, fields, vals))
@@ -471,7 +471,7 @@ impl<'a, 'store> State<'a, 'store> {
             Prim::TupleCon(fields) => Ctrl::from_value(Value::TupleCon(fields, args.to_vec())),
             Prim::TupleProj(field) => {
                 if let Value::TupleCon(fields, vals) = &*args[0] {
-                    let idx = fields.iter().position(|x| x == *field).unwrap();
+                    let idx = fields.iter().position(|x| x == field).unwrap();
                     Ctrl::Value(Rc::clone(&vals[idx]))
                 } else {
                     panic!("TupleProj not on TupleCon")
@@ -482,8 +482,8 @@ impl<'a, 'store> State<'a, 'store> {
             }
             Prim::Lam(body, captured) => {
                 let mut new_env = Env::new();
-                new_env.push_many(captured);
-                new_env.push_many(args);
+                new_env.push_many(&captured);
+                new_env.push_many(&args);
                 let old_env = std::mem::replace(&mut self.env, new_env);
                 self.kont.push(Kont::Dump(old_env));
                 Ctrl::Expr(body)
@@ -655,7 +655,7 @@ impl<'a, 'store> State<'a, 'store> {
                 let result = state.get_result();
                 match result {
                     Ok(value) => {
-                        if *should_succeed {
+                        if should_succeed {
                             self.store.commit();
                             Ctrl::Value(value)
                         } else {
@@ -663,7 +663,7 @@ impl<'a, 'store> State<'a, 'store> {
                         }
                     }
                     Err(err) => {
-                        if *should_succeed {
+                        if should_succeed {
                             Ctrl::Error(err.message)
                         } else {
                             self.store.rollback();
@@ -714,7 +714,7 @@ impl<'a, 'store> State<'a, 'store> {
             }
             Kont::ArgFAP(prim, args) => {
                 self.kont.push(Kont::Fun(ctrl.into_pap()));
-                self.interpret_prim(&prim, &args)
+                self.interpret_prim(prim, args)
             }
             Kont::Fun(mut pap) => {
                 assert!(pap.missing > 0);
@@ -723,7 +723,7 @@ impl<'a, 'store> State<'a, 'store> {
                     pap.missing -= 1;
                     Ctrl::PAP(pap)
                 } else {
-                    self.interpret_prim(&pap.prim, &pap.args)
+                    self.interpret_prim(pap.prim, pap.args)
                 }
             }
             Kont::Match(alts) => {

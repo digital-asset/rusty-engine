@@ -133,7 +133,7 @@ impl Builtin {
         }
     }
 
-    fn binop_int64<'a, F>(f: F, op: &str, args: &[Rc<Value<'a>>]) -> Result<Value<'a>, String>
+    fn binop_int64<'a, F>(f: F, op: &str, args: Vec<Rc<Value<'a>>>) -> Result<Value<'a>, String>
     where
         F: FnOnce(i64, i64) -> Option<i64>,
     {
@@ -147,7 +147,7 @@ impl Builtin {
 
     pub fn interpret<'a>(
         self,
-        args: &[Rc<Value<'a>>],
+        args: Vec<Rc<Value<'a>>>,
         world: &'a World,
     ) -> Result<Value<'a>, String> {
         use self::Builtin::*;
