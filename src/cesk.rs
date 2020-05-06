@@ -62,7 +62,6 @@ enum Ctrl<'a> {
 
 #[derive(Debug)]
 enum Kont<'a> {
-    Dump(Env<'a>),
     DumpParties {
         authorizers: FnvHashSet<Party>,
         witnesses: FnvHashSet<Party>,
@@ -219,10 +218,7 @@ impl<'a, 'store> State<'a, 'store> {
                 if let Some(value) = &self.value_cache[*index] {
                     Ctrl::Value(Rc::clone(value))
                 } else {
-                    let new_env = Env::new();
-                    let old_env = std::mem::replace(&mut self.env, new_env);
                     self.kont.push(Kont::Cache(*index));
-                    self.kont.push(Kont::Dump(old_env));
                     let def = self.world.get_value(module_ref, name);
                     Ctrl::Expr(&def.expr)
                 }
@@ -481,21 +477,18 @@ impl<'a, 'store> State<'a, 'store> {
                 Ctrl::from_value(Value::VariantCon(tycon, con, Rc::clone(&args[0])))
             }
             Prim::Lam(body, captured) => {
-                let mut new_env = Env::new();
-                new_env.push_many(&captured);
-                new_env.push_many(&args);
-                let old_env = std::mem::replace(&mut self.env, new_env);
-                self.kont.push(Kont::Dump(old_env));
+                self.kont.push(Kont::Pop(captured.len() + args.len()));
+                self.env.push_many(&captured);
+                self.env.push_many(&args);
                 Ctrl::Expr(body)
             }
 
             Prim::CreateCall(template) => {
                 let payload = Rc::clone(&args[0]);
 
-                let mut new_env = Env::new();
-                new_env.push(payload);
-                let old_env = std::mem::replace(&mut self.env, new_env);
-                self.kont.push(Kont::Dump(old_env));
+                // NOTE(MH): We don't add a pop continuation for the `payload`
+                // since `CreateExec` will pop it.
+                self.env.push(payload);
                 self.kont.push(Kont::Arg(&template.precondtion));
                 Ctrl::from_prim(Prim::CreateCheckPrecondition(template), 1)
             }
@@ -570,11 +563,11 @@ impl<'a, 'store> State<'a, 'store> {
                 let payload = Rc::clone(&contract.payload);
                 let arg = Rc::clone(&args[1]);
 
-                let mut new_env = Env::new();
-                new_env.push(payload);
-                new_env.push(arg);
-                let old_env = std::mem::replace(&mut self.env, new_env);
-                self.kont.push(Kont::Dump(old_env));
+                // NOTE(MH): We pop 3 elements since `ExerciseExec` will
+                // pop `arg`, push a `contract_id` and push `arg` again.
+                self.kont.push(Kont::Pop(3));
+                self.env.push(payload);
+                self.env.push(arg);
                 self.kont.push(Kont::ArgVal(Rc::clone(contract_id)));
                 self.kont.push(Kont::Arg(&choice.controllers));
                 Ok(Ctrl::from_prim(Prim::ExerciseExec(choice), 2))
@@ -687,10 +680,6 @@ impl<'a, 'store> State<'a, 'store> {
     fn step_value(&mut self, ctrl: Ctrl<'a>) -> Ctrl<'a> {
         let kont = self.kont.pop().expect("Step on final state");
         match kont {
-            Kont::Dump(env) => {
-                self.env = env;
-                ctrl
-            }
             Kont::DumpParties {
                 authorizers,
                 witnesses,
