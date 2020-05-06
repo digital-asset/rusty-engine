@@ -808,34 +808,37 @@ impl<'a, 'store> State<'a, 'store> {
         }
     }
 
-    fn step(&mut self) {
-        let old_ctrl = std::mem::take(&mut self.ctrl);
-
-        let new_ctrl = match old_ctrl {
-            Ctrl::Evaluating => panic!("Control was not updated after last step"),
-            Ctrl::Error(msg) => panic!("Interpretation continues after error: {}", msg),
-            Ctrl::Expr(expr) => self.step_expr(expr),
-            Ctrl::Value(_) | Ctrl::PAP(_) => self.step_value(old_ctrl),
-        };
-
-        self.ctrl = new_ctrl
-    }
-
-    fn is_final(&self) -> bool {
-        debug_assert!({
-            match &self.ctrl {
-                Ctrl::Value(v) => match **v {
-                    Value::PAP(_, _, missing) => missing > 0,
+    fn step_all(&mut self) {
+        loop {
+            debug_assert!({
+                match &self.ctrl {
+                    Ctrl::Value(v) => match **v {
+                        Value::PAP(_, _, missing) => missing > 0,
+                        _ => true,
+                    },
+                    Ctrl::PAP(pap) => pap.missing > 0,
                     _ => true,
-                },
-                Ctrl::PAP(pap) => pap.missing > 0,
-                _ => true,
-            }
-        });
-        match &self.ctrl {
-            Ctrl::Evaluating | Ctrl::Expr(_) => false,
-            Ctrl::Value(_) | Ctrl::PAP(_) => self.kont.is_empty(),
-            Ctrl::Error(_) => true,
+                }
+            });
+            let old_ctrl = std::mem::take(&mut self.ctrl);
+            match old_ctrl {
+                Ctrl::Evaluating => panic!("Control was not updated after last step"),
+                Ctrl::Error(_) => {
+                    self.ctrl = old_ctrl;
+                    return;
+                }
+                Ctrl::Expr(expr) => {
+                    self.ctrl = self.step_expr(expr);
+                }
+                Ctrl::Value(_) | Ctrl::PAP(_) => {
+                    if self.kont.is_empty() {
+                        self.ctrl = old_ctrl;
+                        return;
+                    } else {
+                        self.ctrl = self.step_value(old_ctrl);
+                    }
+                }
+            };
         }
     }
 
@@ -857,12 +860,6 @@ impl<'a, 'store> State<'a, 'store> {
                 })
             }
             _ => panic!("IMPOSSIBLE: final control is always a value"),
-        }
-    }
-
-    fn step_all(&mut self) {
-        while !self.is_final() {
-            self.step();
         }
     }
 
