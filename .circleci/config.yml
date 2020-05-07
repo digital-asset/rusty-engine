@@ -15,7 +15,7 @@ jobs:
       - restore_cache:
           name: Restore Rust cache
           keys:
-              - rust-v0-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum ".circleci/config.yml" }}
+              - rust-v1-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum ".circleci/config.yml" }}
       - run:
           name: Audit and licensing
           command: |
@@ -49,4 +49,7 @@ jobs:
               - target/debug/.fingerprint
               - target/debug/build
               - target/debug/deps
-          key: rust-v0-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum ".circleci/config.yml" }}
+              - target/releae/.fingerprint
+              - target/releae/build
+              - target/releae/deps
+          key: rust-v1-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum ".circleci/config.yml" }}
