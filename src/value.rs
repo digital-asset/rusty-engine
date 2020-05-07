@@ -72,8 +72,12 @@ impl<'a> Env<'a> {
         self.stack.push(value);
     }
 
-    pub fn push_many(&mut self, args: &[Rc<Value<'a>>]) {
+    pub fn push_slice(&mut self, args: &[Rc<Value<'a>>]) {
         self.stack.extend_from_slice(args);
+    }
+
+    pub fn push_vec(&mut self, mut args: Vec<Rc<Value<'a>>>) {
+        self.stack.append(&mut args);
     }
 
     pub fn pop(&mut self) -> Rc<Value<'a>> {

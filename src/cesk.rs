@@ -478,8 +478,8 @@ impl<'a, 'store> State<'a, 'store> {
             }
             Prim::Lam(body, captured) => {
                 self.kont.push(Kont::Pop(captured.len() + args.len()));
-                self.env.push_many(&captured);
-                self.env.push_many(&args);
+                self.env.push_slice(&captured);
+                self.env.push_vec(args);
                 Ctrl::Expr(body)
             }
 
