@@ -385,7 +385,7 @@ impl<'a, 'store> State<'a, 'store> {
     }
 
     /// Step when control contains a fully applied primitive.
-    fn interpret_prim(&mut self, prim: Prim<'a>, args: Vec<Rc<Value<'a>>>) -> Ctrl<'a> {
+    fn interpret_prim(&mut self, prim: Prim<'a>, mut args: Vec<Rc<Value<'a>>>) -> Ctrl<'a> {
         match prim {
             Prim::Builtin(Builtin::TextToText) => Ctrl::Value(Rc::clone(&args[0])),
             // TODO(MH): There's plenty of room for optimizations in foldr
@@ -484,34 +484,42 @@ impl<'a, 'store> State<'a, 'store> {
             }
 
             Prim::CreateCall(template) => {
-                let payload = Rc::clone(&args[0]);
-
-                // NOTE(MH): We don't add a pop continuation for the `payload`
-                // since `CreateExec` will pop it.
-                self.env.push(payload);
+                let payload = &args[0];
+                self.kont.push(Kont::Pop(1));
+                self.env.push(Rc::clone(&payload));
                 self.kont.push(Kont::Arg(&template.precondtion));
-                Ctrl::from_prim(Prim::CreateCheckPrecondition(template), 1)
+                Ctrl::PAP(PAP {
+                    prim: Prim::CreateCheckPrecondition(template),
+                    args,
+                    missing: 1,
+                })
             }
             Prim::CreateCheckPrecondition(template) => {
-                let payload = self.env.top();
-                let precondtion: bool = args[0].as_bool();
+                let payload = &args[0];
+                let precondtion: bool = args[1].as_bool();
                 if !precondtion {
                     Ctrl::Error(format!(
                         "Template pre-condition violated for {}: {:?}",
                         template.self_ref, payload
                     ))
                 } else {
+                    self.kont.push(Kont::Pop(1));
+                    self.env.push(Rc::clone(&payload));
                     self.kont.push(Kont::Arg(&template.observers));
                     self.kont.push(Kont::Arg(&template.signatories));
-                    Ctrl::from_prim(Prim::CreateExec(template), 2)
+                    args.truncate(1);
+                    Ctrl::PAP(PAP {
+                        prim: Prim::CreateExec(template),
+                        args,
+                        missing: 2,
+                    })
                 }
             }
             Prim::CreateExec(template) => {
-                let payload = self.env.pop();
                 let update_mode = self.mode.as_update_mode();
-
-                let signatories = args[0].as_party_set();
-                let observers = args[1].as_party_set();
+                let payload = &args[0];
+                let signatories = args[1].as_party_set();
+                let observers = args[2].as_party_set();
                 if !signatories.is_subset(&update_mode.authorizers) {
                     Ctrl::Error(format!(
                         "authorization missing for create {}: {:?}",
@@ -523,7 +531,7 @@ impl<'a, 'store> State<'a, 'store> {
 
                     let contract_id = self.store.create(Contract {
                         template_ref: &template.self_ref,
-                        payload,
+                        payload: Rc::clone(payload),
                         signatories,
                         observers,
                         witnesses,
@@ -554,29 +562,33 @@ impl<'a, 'store> State<'a, 'store> {
             Prim::ExerciseCall(choice) => Ctrl::catch(|| {
                 let update_mode = self.mode.as_update_mode();
                 let contract_id = &args[0];
+                let arg = &args[1];
                 let contract = self.store.fetch(
                     &update_mode.submitter,
                     &update_mode.witnesses,
                     &choice.template_ref,
                     contract_id.as_contract_id(),
                 )?;
-                let payload = Rc::clone(&contract.payload);
-                let arg = Rc::clone(&args[1]);
+                let payload = &contract.payload;
 
-                // NOTE(MH): We pop 3 elements since `ExerciseExec` will
-                // pop `arg`, push a `contract_id` and push `arg` again.
-                self.kont.push(Kont::Pop(3));
-                self.env.push(payload);
-                self.env.push(arg);
-                self.kont.push(Kont::ArgVal(Rc::clone(contract_id)));
+                self.kont.push(Kont::Pop(2));
+                self.env.push(Rc::clone(&payload));
+                self.env.push(Rc::clone(&arg));
                 self.kont.push(Kont::Arg(&choice.controllers));
-                Ok(Ctrl::from_prim(Prim::ExerciseExec(choice), 2))
+                args.reserve(2);
+                args.push(Rc::clone(payload));
+                Ok(Ctrl::PAP(PAP {
+                    prim: Prim::ExerciseExec(choice),
+                    args,
+                    missing: 1,
+                }))
             }),
             Prim::ExerciseExec(choice) => Ctrl::catch(|| {
                 let update_mode = self.mode.as_mut_update_mode();
-                let controllers = args[0].as_party_set();
-                let contract_id = &args[1];
-                let arg = self.env.pop();
+                let contract_id = &args[0];
+                let arg = &args[1];
+                let payload = &args[2];
+                let controllers = args[3].as_party_set();
 
                 if !controllers.is_subset(&update_mode.authorizers) {
                     Err(format!(
@@ -608,8 +620,10 @@ impl<'a, 'store> State<'a, 'store> {
                         )?;
                     }
 
+                    self.kont.push(Kont::Pop(3));
+                    self.env.push(Rc::clone(payload));
                     self.env.push(Rc::clone(contract_id));
-                    self.env.push(arg);
+                    self.env.push(Rc::clone(arg));
 
                     let old_authorizers =
                         std::mem::replace(&mut update_mode.authorizers, new_authorizers);
