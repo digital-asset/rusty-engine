@@ -64,10 +64,6 @@ impl<'a> Env<'a> {
             .expect("Bad de Bruijn index")
     }
 
-    pub fn top(&self) -> &Rc<Value<'a>> {
-        self.stack.last().expect("Top on empty stack")
-    }
-
     pub fn push(&mut self, value: Rc<Value<'a>>) {
         self.stack.push(value);
     }
@@ -78,10 +74,6 @@ impl<'a> Env<'a> {
 
     pub fn push_vec(&mut self, mut args: Vec<Rc<Value<'a>>>) {
         self.stack.append(&mut args);
-    }
-
-    pub fn pop(&mut self) -> Rc<Value<'a>> {
-        self.stack.pop().expect("Pop from empty stack")
     }
 
     pub fn pop_many(&mut self, count: usize) {
