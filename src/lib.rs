@@ -6,6 +6,7 @@ mod builtin;
 mod cesk;
 mod protos;
 mod store;
+mod unpack;
 mod value;
 
 pub use crate::ast::{DefValue, Module, World};

@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use crate::ast::*;
 use crate::store::*;
+use crate::unpack::Unpack;
 use crate::value::*;
 
 #[derive(Debug)]
@@ -387,55 +388,54 @@ impl<'a, 'store> State<'a, 'store> {
     /// Step when control contains a fully applied primitive.
     fn interpret_prim(&mut self, prim: Prim<'a>, args: Vec<Rc<Value<'a>>>) -> Ctrl<'a> {
         match prim {
-            Prim::Builtin(Builtin::TextToText) => Ctrl::Value(Rc::clone(&args[0])),
+            Prim::Builtin(Builtin::TextToText) => Ctrl::Value(args.unpack1()),
             // TODO(MH): There's plenty of room for optimizations in foldr
             // and foldl, but let's get something simple and correct first.
             Prim::Builtin(Builtin::Foldr) => {
-                let f = &args[0];
-                let z = &args[1];
-                match &*args[2] {
+                let (f, z, xs) = args.unpack3();
+                match &*xs {
                     // foldr f z [] = z
-                    Value::Nil => Ctrl::Value(Rc::clone(z)),
+                    Value::Nil => Ctrl::Value(z),
                     // foldr f z (x::xs) = f x (foldr f z xs)
                     Value::Cons(x, xs) => {
-                        let args2 = vec![Rc::clone(f), Rc::clone(z), Rc::clone(xs)];
+                        let args2 = vec![Rc::clone(&f), z, Rc::clone(&xs)];
                         // TODO(MH): This is the only use case for `Kont::ArgFAP`.
                         // We should find something less special.
                         self.kont
                             .push(Kont::ArgFAP(Prim::Builtin(Builtin::Foldr), args2));
-                        self.kont.push(Kont::ArgVal(Rc::clone(x)));
-                        Ctrl::Value(Rc::clone(f))
+                        self.kont.push(Kont::ArgVal(Rc::clone(&x)));
+                        Ctrl::Value(f)
                     }
                     v => panic!("Foldr not on list: {:?}", v),
                 }
             }
             Prim::Builtin(Builtin::Foldl) => {
-                let f = &args[0];
-                let z = &args[1];
-                match &*args[2] {
+                let (f, z, xs) = args.unpack3();
+                match &*xs {
                     // foldl f z [] = z
-                    Value::Nil => Ctrl::Value(Rc::clone(z)),
+                    Value::Nil => Ctrl::Value(z),
                     // foldl f z (x::xs) = foldl f (f z x) xs
                     Value::Cons(x, xs) => {
                         self.kont.push(Kont::ArgVal(Rc::clone(xs)));
                         let pap = PAP {
                             prim: Prim::Builtin(Builtin::Foldl),
-                            args: vec![Rc::clone(f)],
+                            args: vec![Rc::clone(&f)],
                             missing: 2,
                         };
                         self.kont.push(Kont::Fun(pap));
                         self.kont.push(Kont::ArgVal(Rc::clone(x)));
-                        self.kont.push(Kont::ArgVal(Rc::clone(z)));
-                        Ctrl::Value(Rc::clone(f))
+                        self.kont.push(Kont::ArgVal(z));
+                        Ctrl::Value(f)
                     }
                     v => panic!("Foldl not on list: {:?}", v),
                 }
             }
             Prim::Builtin(Builtin::EqualList) => {
+                let (eq, xs, ys) = args.unpack3();
                 self.kont.push(Kont::EqualList(
-                    Rc::clone(&args[0]),
-                    args[1].as_list(),
-                    args[2].as_list(),
+                    eq,
+                    xs.as_list(),
+                    ys.as_list(),
                 ));
                 Ctrl::from_value(Value::Bool(true))
             }
@@ -447,7 +447,8 @@ impl<'a, 'store> State<'a, 'store> {
                 Ctrl::from_value(Value::RecCon(tycon, fields, args.to_vec()))
             }
             Prim::RecProj(_tycon, field) => {
-                if let Value::RecCon(_tycon, fields, vals) = &*args[0] {
+                let rec = args.unpack1();
+                if let Value::RecCon(_tycon, fields, vals) = &*rec {
                     let idx = fields.iter().position(|x| x == field).unwrap();
                     Ctrl::Value(Rc::clone(&vals[idx]))
                 } else {
@@ -455,10 +456,11 @@ impl<'a, 'store> State<'a, 'store> {
                 }
             }
             Prim::RecUpd(_tycon, field) => {
-                if let Value::RecCon(tycon, fields, vals) = &*args[0] {
+                let (rec, new_val) = args.unpack2();
+                if let Value::RecCon(tycon, fields, vals) = &*rec {
                     let idx = fields.iter().position(|x| x == field).unwrap();
                     let mut vals = vals.clone();
-                    vals[idx] = Rc::clone(&args[1]);
+                    vals[idx] = new_val;
                     Ctrl::from_value(Value::RecCon(tycon, fields, vals))
                 } else {
                     panic!("RecUpd not on RecCon")
@@ -466,7 +468,8 @@ impl<'a, 'store> State<'a, 'store> {
             }
             Prim::TupleCon(fields) => Ctrl::from_value(Value::TupleCon(fields, args.to_vec())),
             Prim::TupleProj(field) => {
-                if let Value::TupleCon(fields, vals) = &*args[0] {
+                let rec = args.unpack1();
+                if let Value::TupleCon(fields, vals) = &*rec {
                     let idx = fields.iter().position(|x| x == field).unwrap();
                     Ctrl::Value(Rc::clone(&vals[idx]))
                 } else {
@@ -474,7 +477,7 @@ impl<'a, 'store> State<'a, 'store> {
                 }
             }
             Prim::VariantCon(tycon, con) => {
-                Ctrl::from_value(Value::VariantCon(tycon, con, Rc::clone(&args[0])))
+                Ctrl::from_value(Value::VariantCon(tycon, con, args.unpack1()))
             }
             Prim::Lam(body, captured) => {
                 self.kont.push(Kont::Pop(captured.len() + args.len()));
@@ -484,7 +487,7 @@ impl<'a, 'store> State<'a, 'store> {
             }
 
             Prim::CreateCall(template) => {
-                let payload = Rc::clone(&args[0]);
+                let payload = args.unpack1();
 
                 // NOTE(MH): We don't add a pop continuation for the `payload`
                 // since `CreateExec` will pop it.
@@ -553,7 +556,7 @@ impl<'a, 'store> State<'a, 'store> {
             }),
             Prim::ExerciseCall(choice) => Ctrl::catch(|| {
                 let update_mode = self.mode.as_update_mode();
-                let contract_id = &args[0];
+                let (contract_id, arg) = args.unpack2();
                 let contract = self.store.fetch(
                     &update_mode.submitter,
                     &update_mode.witnesses,
@@ -561,21 +564,20 @@ impl<'a, 'store> State<'a, 'store> {
                     contract_id.as_contract_id(),
                 )?;
                 let payload = Rc::clone(&contract.payload);
-                let arg = Rc::clone(&args[1]);
 
                 // NOTE(MH): We pop 3 elements since `ExerciseExec` will
                 // pop `arg`, push a `contract_id` and push `arg` again.
                 self.kont.push(Kont::Pop(3));
                 self.env.push(payload);
                 self.env.push(arg);
-                self.kont.push(Kont::ArgVal(Rc::clone(contract_id)));
+                self.kont.push(Kont::ArgVal(contract_id));
                 self.kont.push(Kont::Arg(&choice.controllers));
                 Ok(Ctrl::from_prim(Prim::ExerciseExec(choice), 2))
             }),
             Prim::ExerciseExec(choice) => Ctrl::catch(|| {
                 let update_mode = self.mode.as_mut_update_mode();
-                let controllers = args[0].as_party_set();
-                let contract_id = &args[1];
+                let (controllers, contract_id) = args.unpack2();
+                let controllers = controllers.as_party_set();
                 let arg = self.env.pop();
 
                 if !controllers.is_subset(&update_mode.authorizers) {
@@ -608,7 +610,7 @@ impl<'a, 'store> State<'a, 'store> {
                         )?;
                     }
 
-                    self.env.push(Rc::clone(contract_id));
+                    self.env.push(contract_id);
                     self.env.push(arg);
 
                     let old_authorizers =
@@ -624,11 +626,11 @@ impl<'a, 'store> State<'a, 'store> {
                 }
             }),
             Prim::Submit { should_succeed } => {
-                let submitter = args[0].as_party().clone();
+                let (submitter, update) = args.unpack2();
+                let submitter = submitter.as_party().clone();
                 let mut authorizers = FnvHashSet::default();
                 authorizers.insert(submitter.clone());
                 let witnesses = authorizers.clone();
-                let update = Rc::clone(&args[1]);
                 let mut state = State {
                     ctrl: Ctrl::Value(update),
                     env: Env::new(),

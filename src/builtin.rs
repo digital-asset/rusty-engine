@@ -4,6 +4,7 @@ use bigdecimal::BigDecimal;
 use std::rc::Rc;
 
 use crate::ast::*;
+use crate::unpack::Unpack;
 use crate::value::*;
 
 mod i64_aux {
@@ -337,18 +338,14 @@ impl Builtin {
             }
 
             Cons => {
-                let head = Rc::clone(&args[0]);
-                let tail = Rc::clone(&args[1]);
+                let (head, tail) = args.unpack2();
                 Ok(Value::Cons(head, tail))
             }
             Foldr => panic!("Builtin::Foldr is handled in step"),
             Foldl => panic!("Builtin::Foldl is handled in step"),
             EqualList => panic!("Builtin::EqualLit is handled in step"),
 
-            Some => {
-                let body = Rc::clone(&args[0]);
-                Ok(Value::Some(body))
-            }
+            Some => Ok(Value::Some(args.unpack1())),
             Error => Err(args[0].as_string().to_owned()),
 
             MapInsert => {
