@@ -1,6 +1,7 @@
 // Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 use std::env;
+use std::fs::File;
 use std::time::Instant;
 
 use rusty_engine::*;
@@ -35,9 +36,17 @@ fn main() -> std::io::Result<()> {
             let start = Instant::now();
             let mut store = Store::new();
             let entry_point = world.entry_point(&module.name, &value.name);
-            let state = State::new(entry_point, &world, &mut store);
-            let result = state.run();
+            let mut state = State::new(entry_point, &world, &mut store);
+            state.step_all();
             let duration = start.elapsed();
+            println!("Starting conversion to speedscope ({} events)", state.events.len());
+            let speedscope_json = events_to_speedscope_json(&state.events);
+            println!("Ended conversion to speedscope");
+            println!("Writing speedscope file");
+            serde_json::to_writer(File::create("profile.json")?, &speedscope_json)?;
+            println!("Written speedscope file");
+
+            let result = state.get_result();
             let (active, archived) = store.stats();
 
             match result {

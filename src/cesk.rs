@@ -3,6 +3,7 @@
 use fnv::{FnvHashMap, FnvHashSet};
 use std::fmt;
 use std::rc::Rc;
+use std::time::Instant;
 
 use crate::ast::*;
 use crate::store::*;
@@ -27,7 +28,7 @@ impl<'a> fmt::Display for Error<'a> {
 #[derive(Debug)]
 pub enum Prim<'a> {
     Builtin(Builtin),
-    Lam(&'a Expr, Rc<Vec<Rc<Value<'a>>>>),
+    Lam(&'a Expr, Option<&'a str>, Rc<Vec<Rc<Value<'a>>>>),
     RecCon(&'a TypeConRef, &'a Vec<String>),
     RecProj(&'a TypeConRef, &'a String),
     RecUpd(&'a TypeConRef, &'a String),
@@ -76,6 +77,8 @@ enum Kont<'a> {
     EqualList(Rc<Value<'a>>, ValueListIter<'a>, ValueListIter<'a>),
     Location(&'a Location),
     Cache(usize),
+    Label(&'a str),
+    StopEvent(&'a str),
 }
 
 #[derive(Debug)]
@@ -93,6 +96,12 @@ enum Mode {
 }
 
 #[derive(Debug)]
+pub enum Event<'a> {
+    Start(&'a str, Instant),
+    End(&'a str, Instant),
+}
+
+#[derive(Debug)]
 pub struct State<'a, 'store> {
     ctrl: Ctrl<'a>,
     env: Env<'a>,
@@ -102,6 +111,7 @@ pub struct State<'a, 'store> {
     world: &'a World,
     store: &'store mut Store<'a>,
     value_cache: Vec<Option<Rc<Value<'a>>>>,
+    pub events: Vec<Event<'a>>,
 }
 
 impl<'a> Default for Ctrl<'a> {
@@ -124,7 +134,9 @@ impl<'a> Ctrl<'a> {
                 missing,
             }) => match prim {
                 Prim::Builtin(builtin) => Rc::new(Value::PAP(builtin, args, missing)),
-                Prim::Lam(body, captured) => Rc::new(Value::Lam(body, captured, args, missing)),
+                Prim::Lam(body, label, captured) => {
+                    Rc::new(Value::Lam(body, label, captured, args, missing))
+                }
                 _ => panic!("Putting bad prim in heap: {:?}", prim),
             },
             _ => panic!("expected value, found {:?}", self),
@@ -139,8 +151,8 @@ impl<'a> Ctrl<'a> {
                     args: args.clone(),
                     missing: *missing,
                 },
-                Value::Lam(body, captured, args, missing) => PAP {
-                    prim: Prim::Lam(body, Rc::clone(captured)),
+                Value::Lam(body, label, captured, args, missing) => PAP {
+                    prim: Prim::Lam(body, *label, Rc::clone(captured)),
                     args: args.clone(),
                     missing: *missing,
                 },
@@ -199,7 +211,14 @@ impl<'a, 'store> State<'a, 'store> {
             world,
             store,
             value_cache: world.empty_value_cache(),
+            events: Vec::new(),
         }
+    }
+
+    fn start_span(&mut self, label: &'a str) {
+        let start_time = Instant::now();
+        self.events.push(Event::Start(label, start_time));
+        self.kont.push(Kont::StopEvent(label));
     }
 
     /// Step when the control contains an expression.
@@ -220,6 +239,7 @@ impl<'a, 'store> State<'a, 'store> {
                 } else {
                     self.kont.push(Kont::Cache(*index));
                     let def = self.world.get_value(module_ref, name);
+                    self.kont.push(Kont::Label(&def.label));
                     Ctrl::Expr(&def.expr)
                 }
             }
@@ -313,7 +333,7 @@ impl<'a, 'store> State<'a, 'store> {
                         .map(|index| Rc::clone(self.env.get(*index)))
                         .collect(),
                 );
-                Ctrl::from_prim(Prim::Lam(body, captured), params.len())
+                Ctrl::from_prim(Prim::Lam(body, None, captured), params.len())
             }
 
             Expr::Case { scrut, alts } => {
@@ -327,6 +347,7 @@ impl<'a, 'store> State<'a, 'store> {
                 body,
             } => {
                 self.kont.push(Kont::Let(binder, body));
+                self.kont.push(Kont::Label(binder));
                 Ctrl::Expr(bound)
             }
 
@@ -391,6 +412,7 @@ impl<'a, 'store> State<'a, 'store> {
             // TODO(MH): There's plenty of room for optimizations in foldr
             // and foldl, but let's get something simple and correct first.
             Prim::Builtin(Builtin::Foldr) => {
+                self.start_span("<foldr>");
                 let f = &args[0];
                 let z = &args[1];
                 match &*args[2] {
@@ -410,6 +432,7 @@ impl<'a, 'store> State<'a, 'store> {
                 }
             }
             Prim::Builtin(Builtin::Foldl) => {
+                self.start_span("<foldl>");
                 let f = &args[0];
                 let z = &args[1];
                 match &*args[2] {
@@ -432,6 +455,7 @@ impl<'a, 'store> State<'a, 'store> {
                 }
             }
             Prim::Builtin(Builtin::EqualList) => {
+                self.start_span("<equal_list>");
                 self.kont.push(Kont::EqualList(
                     Rc::clone(&args[0]),
                     args[1].as_list(),
@@ -476,7 +500,8 @@ impl<'a, 'store> State<'a, 'store> {
             Prim::VariantCon(tycon, con) => {
                 Ctrl::from_value(Value::VariantCon(tycon, con, Rc::clone(&args[0])))
             }
-            Prim::Lam(body, captured) => {
+            Prim::Lam(body, label, captured) => {
+                self.start_span(label.unwrap_or("<anonymous lambda>"));
                 self.kont.push(Kont::Pop(captured.len() + args.len()));
                 self.env.push_slice(&captured);
                 self.env.push_vec(args);
@@ -658,8 +683,10 @@ impl<'a, 'store> State<'a, 'store> {
                     world: self.world,
                     store: self.store,
                     value_cache: std::mem::take(&mut self.value_cache),
+                    events: std::mem::take(&mut self.events),
                 };
                 state.step_all();
+                std::mem::swap(&mut self.value_cache, &mut state.value_cache);
                 std::mem::swap(&mut self.value_cache, &mut state.value_cache);
                 let result = state.get_result();
                 match result {
@@ -810,10 +837,35 @@ impl<'a, 'store> State<'a, 'store> {
                 self.value_cache[index] = Some(Rc::clone(&value));
                 Ctrl::Value(value)
             }
+            Kont::Label(label) => match ctrl {
+                Ctrl::Value(value) => match &*value {
+                    Value::Lam(body, _label, captured, args, missing) => Ctrl::PAP(PAP {
+                        prim: Prim::Lam(body, Some(label), Rc::clone(captured)),
+                        args: args.clone(),
+                        missing: *missing,
+                    }),
+                    _ => Ctrl::Value(value),
+                },
+                Ctrl::PAP(PAP {
+                    prim: Prim::Lam(body, _label, captured),
+                    args,
+                    missing,
+                }) => Ctrl::PAP(PAP {
+                    prim: Prim::Lam(body, Some(label), captured),
+                    args,
+                    missing,
+                }),
+                _ => ctrl,
+            },
+            Kont::StopEvent(label) => {
+                let end_time = Instant::now();
+                self.events.push(Event::End(label, end_time));
+                ctrl
+            }
         }
     }
 
-    fn step_all(&mut self) {
+    pub fn step_all(&mut self) {
         loop {
             debug_assert!({
                 match &self.ctrl {
@@ -870,6 +922,9 @@ impl<'a, 'store> State<'a, 'store> {
 
     pub fn run(mut self) -> Result<Rc<Value<'a>>, Error<'a>> {
         self.step_all();
+        for event in &self.events {
+            println!("{:?}", event);
+        }
         self.get_result()
     }
 

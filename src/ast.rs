@@ -334,6 +334,7 @@ pub enum Expr {
 #[derive(Debug)]
 pub struct DefValue {
     pub name: String,
+    pub label: String,
     pub location: Option<Location>,
     pub self_ref: Expr,
     pub expr: Expr,
