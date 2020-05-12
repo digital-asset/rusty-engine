@@ -5,11 +5,13 @@ mod ast;
 mod builtin;
 mod cesk;
 mod protos;
+mod speedscope;
 mod store;
 mod value;
 
 pub use crate::ast::{DefValue, Module, World};
-pub use crate::cesk::State;
+pub use crate::cesk::{Event, State};
+pub use crate::speedscope::events_to_speedscope_json;
 pub use crate::store::Store;
 
 #[cfg(test)]

@@ -862,6 +862,7 @@ impl DefValue {
         } else {
             panic!("items and id both set for internable string list")
         };
+        let label = format!("{}:{}", module_ref, name);
         let location = Location::from_proto(proto.location, env);
         let index = usize::MAX;
         let self_ref = Expr::Val {
@@ -873,6 +874,7 @@ impl DefValue {
         let is_test = proto.is_test;
         DefValue {
             name,
+            label,
             location,
             self_ref,
             expr,
